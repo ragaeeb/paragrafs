@@ -30,16 +30,16 @@
     "license": "MIT",
     "devDependencies": {
         "@eslint/js": "^9.24.0",
-        "@types/bun": "^1.2.8",
+        "@types/bun": "^1.2.9",
         "@types/node": "^22.14.0",
         "eslint": "^9.24.0",
-        "eslint-config-prettier": "^10.1.1",
+        "eslint-config-prettier": "^10.1.2",
         "eslint-plugin-perfectionist": "^4.11.0",
         "eslint-plugin-prettier": "^5.2.6",
         "globals": "^16.0.0",
         "prettier": "^3.5.3",
         "semantic-release": "^24.2.3",
         "tsup": "^8.4.0",
-        "typescript-eslint": "^8.29.0"
+        "typescript-eslint": "^8.29.1"
     }
 }
