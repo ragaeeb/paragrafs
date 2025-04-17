@@ -1,6 +1,16 @@
 import { formatSecondsToTimestamp, isEndingWithPunctuation } from './textUtils';
 import { MarkedSegment, type MarkedToken, type Segment, SEGMENT_BREAK, type Token } from './types';
 
+/**
+ * Estimates a segment with word-level tokens from a single token with multi-word text.
+ * Splits the text by whitespace and calculates approximate timing for each word.
+ *
+ * @param {Token} param0 - The source token containing text with multiple words
+ * @param {number} param0.end - End time of the token in seconds
+ * @param {number} param0.start - Start time of the token in seconds
+ * @param {string} param0.text - The multi-word text content
+ * @returns {Segment} A segment with the original text and estimated word-level tokens
+ */
 export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment => {
     const words = text.split(/\s+/);
     const totalTokens = words.length;
@@ -16,6 +26,20 @@ export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment =
     return { end, start, text, tokens };
 };
 
+/**
+ * Marks tokens with segment dividers based on various criteria including:
+ * - Filler words (uh, umm, etc.)
+ * - Line end markers
+ * - Significant time gaps between tokens
+ * - Punctuation at the end of tokens
+ *
+ * @param {Token[]} tokens - Array of tokens to process
+ * @param {Object} options - Configuration options
+ * @param {string[]} [options.fillers] - Optional array of filler words to mark as segment breaks
+ * @param {number} options.gapThreshold - Minimum time gap (in seconds) to consider a segment break
+ * @param {string[]} [options.lineEndMarkers] - Optional array of markers that indicate end of line
+ * @returns {MarkedToken[]} Tokens with segment break markers inserted
+ */
 export const markTokensWithDividers = (
     tokens: Token[],
     { fillers, gapThreshold, lineEndMarkers }: { fillers?: string[]; gapThreshold: number; lineEndMarkers?: string[] },
@@ -50,6 +74,14 @@ export const markTokensWithDividers = (
     return marked;
 };
 
+/**
+ * Groups marked tokens into segments based on maximum segment duration.
+ * Creates segments from tokens, splitting when the duration exceeds the specified maximum.
+ *
+ * @param {MarkedToken[]} markedTokens - Array of tokens with segment break markers
+ * @param {number} maxSecondsPerSegment - Maximum duration (in seconds) for a segment
+ * @returns {MarkedSegment[]} Array of marked segments
+ */
 export const groupMarkedTokensIntoSegments = (
     markedTokens: MarkedToken[],
     maxSecondsPerSegment: number,
@@ -87,6 +119,14 @@ export const groupMarkedTokensIntoSegments = (
     return segments;
 };
 
+/**
+ * Merges segments with fewer than the specified minimum words into the previous segment.
+ * This helps avoid very short segments that might break the flow of text.
+ *
+ * @param {MarkedSegment[]} segments - Array of marked segments to process
+ * @param {number} minWordsPerSegment - Minimum number of words required for a segment to stand alone
+ * @returns {MarkedSegment[]} Array of merged segments
+ */
 export const mergeShortSegmentsWithPrevious = (
     segments: MarkedSegment[],
     minWordsPerSegment: number,
@@ -108,6 +148,14 @@ export const mergeShortSegmentsWithPrevious = (
     return result;
 };
 
+/**
+ * Formats segments into a timestamped transcript with timestamps at the beginning of each line.
+ * Lines are split based on segment breaks and maximum line duration.
+ *
+ * @param {MarkedSegment[]} segments - Array of marked segments to format
+ * @param {number} maxSecondsPerLine - Maximum duration (in seconds) for a single line
+ * @returns {string} Formatted transcript with timestamps
+ */
 export const formatSegmentsToTimestampedTranscript = (segments: MarkedSegment[], maxSecondsPerLine: number): string => {
     const lines: string[] = [];
 
@@ -151,6 +199,15 @@ export const formatSegmentsToTimestampedTranscript = (segments: MarkedSegment[],
     return lines.join('\n');
 };
 
+/**
+ * Maps marked segments into formatted segments with clean text representation.
+ * Combines the tokens into properly formatted text, respecting segment breaks
+ * and optional maximum line duration.
+ *
+ * @param {MarkedSegment[]} segments - Array of marked segments to format
+ * @param {number} [maxSecondsPerLine] - Optional maximum duration (in seconds) for a single line
+ * @returns {Segment[]} Array of formatted segments with clean text
+ */
 export const mapSegmentsIntoFormattedSegments = (segments: MarkedSegment[], maxSecondsPerLine?: number): Segment[] => {
     return segments.map((segment) => {
         const textParts: string[] = [];
@@ -195,6 +252,18 @@ export const mapSegmentsIntoFormattedSegments = (segments: MarkedSegment[], maxS
     });
 };
 
+/**
+ * Convenience function that processes segments through all steps:
+ * marking tokens with dividers, grouping into segments, and merging short segments.
+ *
+ * @param {Segment[]} segments - Array of input segments to process
+ * @param {Object} options - Configuration options
+ * @param {string[]} options.fillers - Array of filler words to mark as segment breaks
+ * @param {number} options.gapThreshold - Minimum time gap (in seconds) to consider a segment break
+ * @param {number} options.maxSecondsPerSegment - Maximum duration (in seconds) for a segment
+ * @param {number} options.minWordsPerSegment - Minimum number of words required for a segment to stand alone
+ * @returns {MarkedSegment[]} Array of processed and marked segments
+ */
 export const markAndCombineSegments = (
     segments: Segment[],
     options: {
