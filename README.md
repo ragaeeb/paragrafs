@@ -209,7 +209,7 @@ To get started:
 
 ## License
 
-`paragrafs` is released under the MIT License. See the LICENSE file for more details.
+`paragrafs` is released under the MIT License. See the [LICENSE.MD](./LICENSE.MD) file for more details.
 
 ## Author
 

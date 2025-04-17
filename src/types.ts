@@ -6,7 +6,7 @@ export type Segment = Token & {
     /**
      * Word-by-word breakdown of the transcription with individual timings
      */
-    tokens?: Token[];
+    tokens: Token[];
 };
 
 /**
