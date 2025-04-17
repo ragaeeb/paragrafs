@@ -6,7 +6,7 @@
 ![GitHub License](https://img.shields.io/github/license/ragaeeb/paragrafs)
 ![GitHub Release](https://img.shields.io/github/v/release/ragaeeb/paragrafs)
 [![codecov](https://codecov.io/gh/ragaeeb/paragrafs/graph/badge.svg?token=B3IRBVOS3H)](https://codecov.io/gh/ragaeeb/paragrafs)
-[![Size](https://deno.bundlejs.com/badge?q=paragrafs@0.1.0&badge=detailed)](https://bundlejs.com/?q=paragrafs%400.1.0)
+[![Size](https://deno.bundlejs.com/badge?q=paragrafs@1.0.0&badge=detailed)](https://bundlejs.com/?q=paragrafs%401.0.0)
 ![typescript](https://badgen.net/badge/icon/typescript?icon=typescript&label&color=blue)
 ![npm](https://img.shields.io/npm/dm/paragrafs)
 ![GitHub issues](https://img.shields.io/github/issues/ragaeeb/paragrafs)

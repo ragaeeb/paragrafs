@@ -1,6 +1,6 @@
 {
     "name": "paragrafs",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "author": "Ragaeeb Haq",
     "main": "dist/index.js",
     "devDependencies": {
