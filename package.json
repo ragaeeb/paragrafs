@@ -37,7 +37,8 @@
     ],
     "license": "MIT",
     "scripts": {
-        "build": "tsup"
+        "build": "tsup",
+        "test": "bun test --coverage --coverage-reporter=lcov"
     },
     "source": "src/index.ts",
     "type": "module",
