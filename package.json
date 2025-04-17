@@ -33,7 +33,8 @@
         "audio",
         "video",
         "nodejs",
-        "ocr"
+        "ocr",
+        "formatting"
     ],
     "license": "MIT",
     "scripts": {
