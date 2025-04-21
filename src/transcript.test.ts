@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 
 import {
     estimateSegmentFromToken,
+    formatSegmentsToTimestampedTranscript,
     groupMarkedTokensIntoSegments,
     mapSegmentsIntoFormattedSegments,
     markAndCombineSegments,
@@ -582,6 +583,106 @@ describe('transcript', () => {
             });
 
             expect(hasPunctuationBreak).toBeTrue();
+        });
+    });
+
+    describe('formatSegmentsToTimestampedTranscript', () => {
+        it('formats a single short line with timestamp', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 4,
+                    start: 0,
+                    tokens: [
+                        { end: 1, start: 0, text: 'Hello' },
+                        { end: 2, start: 1, text: 'world.' },
+                    ],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 10);
+            expect(result).toEqual('0:00: Hello world.');
+        });
+
+        it('splits lines based on punctuation when duration exceeds maxSecondsPerLine', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 15,
+                    start: 0,
+                    tokens: [
+                        { end: 2, start: 0, text: 'Hello' },
+                        { end: 5, start: 2, text: 'there.' },
+                        SEGMENT_BREAK,
+                        { end: 12, start: 6, text: 'How' },
+                        { end: 15, start: 12, text: 'are you?' },
+                    ],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 5);
+            expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
+        });
+
+        it('does not break long sentences if no punctuation is present', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 15,
+                    start: 0,
+                    tokens: [
+                        { end: 2, start: 0, text: 'Just' },
+                        { end: 5, start: 2, text: 'keep' },
+                        { end: 10, start: 5, text: 'going' },
+                        { end: 15, start: 10, text: 'without' },
+                    ],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 5);
+            expect(result).toEqual('0:00: Just keep going without');
+        });
+
+        it('uses custom formatter if formatTokens is provided', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 5,
+                    start: 0,
+                    tokens: [
+                        { end: 2, start: 0, text: 'Testing' },
+                        { end: 5, start: 2, text: 'formatter.' },
+                    ],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 10, (buffer) => {
+                return `> [${buffer.start}s]: ${buffer.text.toUpperCase()}`;
+            });
+
+            expect(result).toEqual('> [0s]: TESTING FORMATTER.');
+        });
+
+        it('handles empty segments gracefully', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 0,
+                    start: 0,
+                    tokens: [],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 5);
+            expect(result).toEqual('');
+        });
+
+        it('supports timestamps over an hour', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 3610,
+                    start: 3601,
+                    tokens: [{ end: 3610, start: 3601, text: 'An hour in.' }],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 10);
+            expect(result).toEqual('1:00:01: An hour in.');
         });
     });
 });

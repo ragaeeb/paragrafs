@@ -156,7 +156,11 @@ export const mergeShortSegmentsWithPrevious = (
  * @param {number} maxSecondsPerLine - Maximum duration (in seconds) for a single line
  * @returns {string} Formatted transcript with timestamps
  */
-export const formatSegmentsToTimestampedTranscript = (segments: MarkedSegment[], maxSecondsPerLine: number): string => {
+export const formatSegmentsToTimestampedTranscript = (
+    segments: MarkedSegment[],
+    maxSecondsPerLine: number,
+    formatTokens?: (buffer: Token) => string,
+): string => {
     const lines: string[] = [];
 
     for (const segment of segments) {
@@ -165,9 +169,14 @@ export const formatSegmentsToTimestampedTranscript = (segments: MarkedSegment[],
 
         const pushBufferAsLine = () => {
             if (buffer.length > 0) {
-                const timestamp = formatSecondsToTimestamp(buffer[0].start);
                 const text = buffer.map((t) => t.text).join(' ');
-                lines.push(`${timestamp}: ${text}`);
+
+                lines.push(
+                    formatTokens
+                        ? formatTokens({ end: buffer.at(-1)!.end, start: buffer[0].start, text })
+                        : `${formatSecondsToTimestamp(buffer[0].start)}: ${text}`,
+                );
+
                 buffer = [];
                 bufferStart = null;
             }
