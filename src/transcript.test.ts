@@ -75,6 +75,40 @@ describe('transcript', () => {
                 SEGMENT_BREAK,
             ]);
         });
+
+        it('should insert a marker and insert the hint', () => {
+            const tokens = [
+                { end: 1, start: 0, text: 'The' },
+                { end: 3, start: 2, text: 'quick' },
+                { end: 5, start: 4, text: 'brown' },
+                { end: 6.5, start: 6, text: 'fox' },
+                { end: 7, start: 6.5, text: 'Alright' },
+                { end: 9, start: 8, text: 'Jumps' },
+                { end: 10, start: 9, text: 'right' },
+                { end: 11, start: 10, text: 'over' },
+                { end: 13, start: 12, text: 'the' },
+                { end: 18, start: 17, text: 'lazy' },
+                { end: 20, start: 19, text: 'dog.' },
+            ];
+
+            const actual = markTokensWithDividers(tokens, { fillers: [], gapThreshold: 10, hints: ['Alright'] });
+
+            expect(actual).toEqual([
+                { end: 1, start: 0, text: 'The' },
+                { end: 3, start: 2, text: 'quick' },
+                { end: 5, start: 4, text: 'brown' },
+                { end: 6.5, start: 6, text: 'fox' },
+                SEGMENT_BREAK,
+                { end: 7, start: 6.5, text: 'Alright' },
+                { end: 9, start: 8, text: 'Jumps' },
+                { end: 10, start: 9, text: 'right' },
+                { end: 11, start: 10, text: 'over' },
+                { end: 13, start: 12, text: 'the' },
+                { end: 18, start: 17, text: 'lazy' },
+                { end: 20, start: 19, text: 'dog.' },
+                SEGMENT_BREAK,
+            ]);
+        });
     });
 
     describe('groupMarkedTokensIntoSegments', () => {
@@ -368,6 +402,54 @@ describe('transcript', () => {
                 .map((token) => (token as any).text);
 
             expect(tokenTexts).toEqual(['Hello', 'world']);
+        });
+
+        it('should support hints', () => {
+            const segments: Segment[] = [
+                {
+                    end: 10,
+                    start: 0,
+                    text: 'The quick brown Fox jumps right over the lazy dog',
+                    tokens: [
+                        { end: 1, start: 0, text: 'The' },
+                        { end: 2, start: 1.5, text: 'quick' },
+                        { end: 3, start: 2, text: 'Fox' },
+                        { end: 4, start: 3, text: 'jumps' },
+                        { end: 6, start: 5, text: 'right' },
+                        { end: 7, start: 6, text: 'over' },
+                        { end: 8, start: 7, text: 'the' },
+                        { end: 9, start: 8, text: 'lazy' },
+                        { end: 10, start: 9, text: 'dog' },
+                    ],
+                },
+            ];
+
+            const result = markAndCombineSegments(segments, {
+                fillers: [],
+                gapThreshold: 10,
+                hints: ['Fox'],
+                maxSecondsPerSegment: 100,
+                minWordsPerSegment: 1,
+            });
+
+            expect(result).toEqual([
+                {
+                    end: 10,
+                    start: 0,
+                    tokens: [
+                        { end: 1, start: 0, text: 'The' },
+                        { end: 2, start: 1.5, text: 'quick' },
+                        SEGMENT_BREAK,
+                        { end: 3, start: 2, text: 'Fox' },
+                        { end: 4, start: 3, text: 'jumps' },
+                        { end: 6, start: 5, text: 'right' },
+                        { end: 7, start: 6, text: 'over' },
+                        { end: 8, start: 7, text: 'the' },
+                        { end: 9, start: 8, text: 'lazy' },
+                        { end: 10, start: 9, text: 'dog' },
+                    ],
+                },
+            ]);
         });
 
         it('should handle time gaps between tokens', () => {

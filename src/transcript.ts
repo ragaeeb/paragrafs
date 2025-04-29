@@ -26,6 +26,12 @@ export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment =
     return { end, start, text, tokens };
 };
 
+type MarkTokensWithDividersOptions = {
+    fillers?: string[];
+    gapThreshold: number;
+    hints?: string[];
+};
+
 /**
  * Marks tokens with segment dividers based on various criteria including:
  * - Filler words (uh, umm, etc.)
@@ -37,12 +43,12 @@ export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment =
  * @param {Object} options - Configuration options
  * @param {string[]} [options.fillers] - Optional array of filler words to mark as segment breaks
  * @param {number} options.gapThreshold - Minimum time gap (in seconds) to consider a segment break
- * @param {string[]} [options.lineEndMarkers] - Optional array of markers that indicate end of line
+ * @param {string[]} [options.hints] - Optional array of markers that indicate a new line should start
  * @returns {MarkedToken[]} Tokens with segment break markers inserted
  */
 export const markTokensWithDividers = (
     tokens: Token[],
-    { fillers, gapThreshold, lineEndMarkers }: { fillers?: string[]; gapThreshold: number; lineEndMarkers?: string[] },
+    { fillers, gapThreshold, hints }: MarkTokensWithDividersOptions,
 ): MarkedToken[] => {
     const marked: MarkedToken[] = [];
     let prevEnd: null | number = null;
@@ -53,8 +59,8 @@ export const markTokensWithDividers = (
             continue;
         }
 
-        if (lineEndMarkers?.includes(token.text)) {
-            marked.push(SEGMENT_BREAK);
+        if (hints?.includes(token.text)) {
+            marked.push(SEGMENT_BREAK, token);
             continue;
         }
 
@@ -275,9 +281,7 @@ export const mapSegmentsIntoFormattedSegments = (segments: MarkedSegment[], maxS
  */
 export const markAndCombineSegments = (
     segments: Segment[],
-    options: {
-        fillers: string[];
-        gapThreshold: number;
+    options: MarkTokensWithDividersOptions & {
         maxSecondsPerSegment: number;
         minWordsPerSegment: number;
     },
@@ -286,6 +290,7 @@ export const markAndCombineSegments = (
     const markedTokens = markTokensWithDividers(tokens, {
         fillers: options.fillers,
         gapThreshold: options.gapThreshold,
+        ...(options.hints && { hints: options.hints }),
     });
     const markedSegments = groupMarkedTokensIntoSegments(markedTokens, options.maxSecondsPerSegment);
     const combinedSegments = mergeShortSegmentsWithPrevious(markedSegments, options.minWordsPerSegment);
