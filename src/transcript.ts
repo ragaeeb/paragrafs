@@ -1,5 +1,9 @@
-import { formatSecondsToTimestamp, isEndingWithPunctuation } from './textUtils';
-import { MarkedSegment, type MarkedToken, type Segment, SEGMENT_BREAK, type Token } from './types';
+import type { MarkedSegment, MarkedToken, MarkTokensWithDividersOptions, Segment, Token } from './types';
+
+import { formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord } from './textUtils';
+import { SEGMENT_BREAK } from './utils/constants';
+import { buildLcsTable, extractLcsMatches } from './utils/lcs';
+import { interpolateMissingWords, isHintMatched } from './utils/transcriptUtils';
 
 /**
  * Estimates a segment with word-level tokens from a single token with multi-word text.
@@ -29,7 +33,7 @@ export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment =
 /**
  * Marks tokens with segment dividers based on various criteria including:
  * - Filler words (uh, umm, etc.)
- * - Line end markers
+ * - Explicit multi-word hints
  * - Significant time gaps between tokens
  * - Punctuation at the end of tokens
  *
@@ -37,33 +41,38 @@ export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment =
  * @param {Object} options - Configuration options
  * @param {string[]} [options.fillers] - Optional array of filler words to mark as segment breaks
  * @param {number} options.gapThreshold - Minimum time gap (in seconds) to consider a segment break
- * @param {string[]} [options.lineEndMarkers] - Optional array of markers that indicate end of line
+ * @param {Hints} [options.hints] - Hints created with the createHints() function to indicate when to insert a new segment break.
  * @returns {MarkedToken[]} Tokens with segment break markers inserted
  */
 export const markTokensWithDividers = (
     tokens: Token[],
-    { fillers, gapThreshold, lineEndMarkers }: { fillers?: string[]; gapThreshold: number; lineEndMarkers?: string[] },
+    { fillers = [], gapThreshold, hints }: MarkTokensWithDividersOptions,
 ): MarkedToken[] => {
     const marked: MarkedToken[] = [];
     let prevEnd: null | number = null;
 
-    for (const token of tokens) {
-        if (fillers?.includes(token.text)) {
+    for (let idx = 0; idx < tokens.length; idx++) {
+        const token = tokens[idx];
+
+        // Filler words always break
+        if (fillers.includes(token.text)) {
             marked.push(SEGMENT_BREAK);
             continue;
         }
 
-        if (lineEndMarkers?.includes(token.text)) {
+        if (hints && isHintMatched(tokens, hints, idx)) {
             marked.push(SEGMENT_BREAK);
-            continue;
         }
 
+        // Large time gap triggers a break
         if (prevEnd !== null && token.start - prevEnd > gapThreshold) {
             marked.push(SEGMENT_BREAK);
         }
 
+        // Push the token itself
         marked.push(token);
 
+        // Punctuation at end triggers a break
         if (isEndingWithPunctuation(token.text)) {
             marked.push(SEGMENT_BREAK);
         }
@@ -275,9 +284,7 @@ export const mapSegmentsIntoFormattedSegments = (segments: MarkedSegment[], maxS
  */
 export const markAndCombineSegments = (
     segments: Segment[],
-    options: {
-        fillers: string[];
-        gapThreshold: number;
+    options: MarkTokensWithDividersOptions & {
         maxSecondsPerSegment: number;
         minWordsPerSegment: number;
     },
@@ -286,9 +293,95 @@ export const markAndCombineSegments = (
     const markedTokens = markTokensWithDividers(tokens, {
         fillers: options.fillers,
         gapThreshold: options.gapThreshold,
+        ...(options.hints && { hints: options.hints }),
     });
     const markedSegments = groupMarkedTokensIntoSegments(markedTokens, options.maxSecondsPerSegment);
     const combinedSegments = mergeShortSegmentsWithPrevious(markedSegments, options.minWordsPerSegment);
 
     return combinedSegments;
 };
+
+/**
+ * Aligns AI-generated tokens to a ground truth human-edited segment text.
+ *
+ * Uses Longest Common Subsequence (LCS) to identify anchor matches between
+ * tokenized output and ground truth. Where no matches exist, it interpolates
+ * timestamped tokens for unmatched words. Falls back to `estimateSegmentFromToken`
+ * if no meaningful overlap is found.
+ *
+ * @param segment - A `Segment` object with ground truth `text` and AI-generated `tokens`
+ * @returns A new `Segment` with the `tokens` adjusted to match the ground truth `text`
+ */
+export function mapTokensToGroundTruth(segment: Segment): Segment {
+    const { end: segmentEnd, start: segmentStart, text, tokens } = segment;
+
+    const groundTruthWords = text.trim().split(/\s+/).filter(Boolean);
+    if (groundTruthWords.length === 0) {
+        return { ...segment, tokens: [] };
+    }
+
+    if (!tokens || tokens.length === 0) {
+        return estimateSegmentFromToken({ end: segmentEnd, start: segmentStart, text });
+    }
+
+    const normalizedTokens = tokens.map((t) => normalizeWord(t.text));
+    const normalizedGround = groundTruthWords.map(normalizeWord);
+
+    const lcsTable = buildLcsTable(normalizedTokens, normalizedGround);
+    const alignedAnchors = extractLcsMatches(lcsTable, normalizedTokens, normalizedGround);
+
+    if (alignedAnchors.length === 0) {
+        return estimateSegmentFromToken({ end: segmentEnd, start: segmentStart, text });
+    }
+
+    const alignedTokens: Token[] = [];
+
+    // Handle text before the first anchor match
+    const firstAnchor = alignedAnchors[0];
+    if (firstAnchor.gtIndex > 0) {
+        alignedTokens.push(
+            ...interpolateMissingWords(
+                segmentStart,
+                tokens[firstAnchor.origIndex].start,
+                groundTruthWords.slice(0, firstAnchor.gtIndex),
+            ),
+        );
+    }
+
+    // Handle anchored and in-between segments
+    for (let i = 0; i < alignedAnchors.length; i++) {
+        const { gtIndex, origIndex } = alignedAnchors[i];
+        const currentToken = tokens[origIndex];
+
+        if (i > 0) {
+            const prevAnchor = alignedAnchors[i - 1];
+            alignedTokens.push(
+                ...interpolateMissingWords(
+                    tokens[prevAnchor.origIndex].end,
+                    currentToken.start,
+                    groundTruthWords.slice(prevAnchor.gtIndex + 1, gtIndex),
+                ),
+            );
+        }
+
+        alignedTokens.push({
+            end: currentToken.end,
+            start: currentToken.start,
+            text: groundTruthWords[gtIndex],
+        });
+    }
+
+    // Handle text after the last anchor match
+    const lastAnchor = alignedAnchors[alignedAnchors.length - 1];
+    if (lastAnchor.gtIndex < groundTruthWords.length - 1) {
+        alignedTokens.push(
+            ...interpolateMissingWords(
+                tokens[lastAnchor.origIndex].end,
+                segmentEnd,
+                groundTruthWords.slice(lastAnchor.gtIndex + 1),
+            ),
+        );
+    }
+
+    return { ...segment, tokens: alignedTokens };
+}

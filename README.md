@@ -6,7 +6,7 @@
 ![GitHub License](https://img.shields.io/github/license/ragaeeb/paragrafs)
 ![GitHub Release](https://img.shields.io/github/v/release/ragaeeb/paragrafs)
 [![codecov](https://codecov.io/gh/ragaeeb/paragrafs/graph/badge.svg?token=B3IRBVOS3H)](https://codecov.io/gh/ragaeeb/paragrafs)
-[![Size](https://deno.bundlejs.com/badge?q=paragrafs@1.0.0&badge=detailed)](https://bundlejs.com/?q=paragrafs%401.0.0)
+[![Size](https://deno.bundlejs.com/badge?q=paragrafs@1.2.0&badge=detailed)](https://bundlejs.com/?q=paragrafs%401.2.0)
 ![typescript](https://badgen.net/badge/icon/typescript?icon=typescript&label&color=blue)
 ![npm](https://img.shields.io/npm/dm/paragrafs)
 ![GitHub issues](https://img.shields.io/github/issues/ragaeeb/paragrafs)
@@ -25,6 +25,7 @@ A lightweight TypeScript library designed to reconstruct paragraphs from OCRed i
 - **Customizable Parameters**: Configure minimum words per segment, max segment length, etc.
 - **Arabic Support**: Handles Arabic question marks and other non-Latin punctuation
 - **Transcript Formatting**: Converts raw token streams into readable text with appropriate line breaks
+- **Ground-Truth Token Mapping**: Aligns AI-generated word timestamps to human-edited transcript text using an LCS-based algorithm with intelligent interpolation
 
 ## Installation
 
@@ -42,6 +43,12 @@ or
 
 ```bash
 yarn add paragrafs
+```
+
+or
+
+```bash
+bun add paragrafs
 ```
 
 ## Usage
@@ -124,6 +131,26 @@ console.log(transcript);
 // 0:08: Jumps right over the
 ```
 
+### Aligning AI Tokens to Human-Edited Text
+
+```typescript
+import { mapTokensToGroundTruth } from 'paragrafs';
+
+const rawSegment = {
+    start: 0,
+    end: 10,
+    text: 'The quick brown fox jumps right over the lazy dog.',
+    tokens: [
+        /* AI-generated word timestamps */
+    ],
+};
+
+const aligned = mapTokensToGroundTruth(rawSegment);
+console.log(aligned.tokens);
+// Each token now matches the ground-truth words exactly,
+// with missing words interpolated where needed.
+```
+
 ## API Reference
 
 ### Core Functions
@@ -155,6 +182,14 @@ Formats segments into a human-readable transcript with timestamps.
 #### `markAndCombineSegments(segments: Segment[], options): MarkedSegment[]`
 
 Combined utility that processes segments through all the necessary steps.
+
+#### `mapTokensToGroundTruth(segment: Segment): Segment`
+
+Synchronizes AI-generated word timestamps with the human-edited transcript (`segment.text`):
+
+- Uses a longest-common-subsequence (LCS) to find matching words and preserve their original timing.
+- Evenly interpolates timestamps for runs of missing words (only when two or more are missing).
+- Falls back to `estimateSegmentFromToken` if no matches are found.
 
 ### Types
 

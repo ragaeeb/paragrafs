@@ -1,3 +1,5 @@
+import type { Hints } from './types';
+
 /**
  * Checks if a text string ends with a punctuation mark (period, question mark, exclamation mark).
  * Supports both Latin and Arabic punctuation.
@@ -22,4 +24,55 @@ export const formatSecondsToTimestamp = (seconds: number): string => {
     return hrs > 0
         ? `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
         : `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+/**
+ * Strip leading/trailing punctuation/symbols, remove Arabic diacritics, NFC-normalize.
+ * Normalizes a word by removing diacritics and punctuation.
+ *
+ * This function:
+ * 1. Decomposes Unicode characters (NFD normalization)
+ * 2. Removes Arabic diacritics
+ * 3. Strips leading and trailing punctuation or symbols
+ * 4. Recomposes Unicode characters (NFC normalization)
+ *
+ * @param {string} w - The word to normalize
+ * @returns {string} The normalized word
+ */
+export const normalizeWord = (w: string) => {
+    return (
+        w
+            // decompose to strip diacritics
+            .normalize('NFD')
+            // remove Arabic diacritic marks
+            .replace(/[\u064B-\u065F]/g, '')
+            // strip any punctuation or symbol at start/end (Unicode property escapes)
+            .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '')
+            // recompose
+            .normalize('NFC')
+    );
+};
+
+/**
+ * Creates a map of hints organized by their first word.
+ *
+ * Takes multiple hint strings, splits each into words, and organizes them into
+ * a map where the keys are the first words and values are arrays of word arrays.
+ *
+ * @param {...string} hints - One or more hint strings to process
+ * @returns {Hints} A map of hints organized by their first word
+ */
+export const createHints = (...hints: string[]) => {
+    const hintMap: Hints = {};
+    for (const hint of hints) {
+        const words = hint.split(' ');
+        const first = words[0];
+        if (!hintMap[first]) {
+            hintMap[first] = [];
+        }
+
+        hintMap[first].push(words);
+    }
+
+    return hintMap;
 };
