@@ -25,6 +25,7 @@ A lightweight TypeScript library designed to reconstruct paragraphs from OCRed i
 - **Customizable Parameters**: Configure minimum words per segment, max segment length, etc.
 - **Arabic Support**: Handles Arabic question marks and other non-Latin punctuation
 - **Transcript Formatting**: Converts raw token streams into readable text with appropriate line breaks
+- **Ground-Truth Token Mapping**: Aligns AI-generated word timestamps to human-edited transcript text using an LCS-based algorithm with intelligent interpolation
 
 ## Installation
 
@@ -42,6 +43,12 @@ or
 
 ```bash
 yarn add paragrafs
+```
+
+or
+
+```bash
+bun add paragrafs
 ```
 
 ## Usage
@@ -124,6 +131,23 @@ console.log(transcript);
 // 0:08: Jumps right over the
 ```
 
+### Aligning AI Tokens to Human-Edited Text
+
+````typescript
+import { mapTokensToGroundTruth } from 'paragrafs';
+
+const rawSegment = {
+  start: 0,
+  end: 10,
+  text: 'The quick brown fox jumps right over the lazy dog.',
+  tokens: [ /* AI-generated word timestamps */ ]
+};
+
+const aligned = mapTokensToGroundTruth(rawSegment);
+console.log(aligned.tokens);
+// Each token now matches the ground-truth words exactly,
+// with missing words interpolated where needed.
+
 ## API Reference
 
 ### Core Functions
@@ -156,6 +180,16 @@ Formats segments into a human-readable transcript with timestamps.
 
 Combined utility that processes segments through all the necessary steps.
 
+#### `mapTokensToGroundTruth(segment: Segment): Segment`
+
+Synchronizes AI-generated word timestamps with the human-edited transcript (`segment.text`):
+- Uses a longest-common-subsequence (LCS) to find matching words and preserve their original timing.
+- Evenly interpolates timestamps for runs of missing words (only when two or more are missing).
+- Falls back to `estimateSegmentFromToken` if no matches are found.
+
+#### `groupMarkedTokensIntoSegments(markedTokens: MarkedToken[], maxSecondsPerSegment: number): MarkedSegment[]`
+  Groups marked tokens into logical segments based on maximum segment length.
+
 ### Types
 
 ```typescript
@@ -176,7 +210,7 @@ type MarkedSegment = {
     end: number;
     tokens: MarkedToken[];
 };
-```
+````
 
 ### Utility Functions
 

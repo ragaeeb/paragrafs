@@ -1,15 +1,27 @@
 import { describe, expect, it } from 'bun:test';
 
+import type { MarkedSegment, MarkedToken, Segment, Token } from './types';
+
+import { createHints } from './textUtils';
 import {
     estimateSegmentFromToken,
     formatSegmentsToTimestampedTranscript,
     groupMarkedTokensIntoSegments,
     mapSegmentsIntoFormattedSegments,
+    mapTokensToGroundTruth,
     markAndCombineSegments,
     markTokensWithDividers,
     mergeShortSegmentsWithPrevious,
 } from './transcript';
-import { type MarkedSegment, type MarkedToken, Segment, SEGMENT_BREAK } from './types';
+import { SEGMENT_BREAK } from './utils/constants';
+
+function roundTokenTimes(tokens: Token[]): Token[] {
+    return tokens.map((t) => ({
+        ...t,
+        end: Math.round(t.end * 100) / 100,
+        start: Math.round(t.start * 100) / 100,
+    }));
+}
 
 describe('transcript', () => {
     describe('estimateSegmentFromToken', () => {
@@ -91,7 +103,11 @@ describe('transcript', () => {
                 { end: 20, start: 19, text: 'dog.' },
             ];
 
-            const actual = markTokensWithDividers(tokens, { fillers: [], gapThreshold: 10, hints: ['Alright'] });
+            const actual = markTokensWithDividers(tokens, {
+                fillers: [],
+                gapThreshold: 10,
+                hints: createHints('Alright'),
+            });
 
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
@@ -427,7 +443,7 @@ describe('transcript', () => {
             const result = markAndCombineSegments(segments, {
                 fillers: [],
                 gapThreshold: 10,
-                hints: ['Fox'],
+                hints: createHints('Fox jumps', 'over it'),
                 maxSecondsPerSegment: 100,
                 minWordsPerSegment: 1,
             });
@@ -765,6 +781,167 @@ describe('transcript', () => {
 
             const result = formatSegmentsToTimestampedTranscript(segments, 10);
             expect(result).toEqual('1:00:01: An hour in.');
+        });
+    });
+
+    describe('updateTokensFromGroundTruth', () => {
+        it('should have no effect if the text remains unchanged', () => {
+            const tokens = [
+                {
+                    end: 1,
+                    start: 0,
+                    text: 'The',
+                },
+                {
+                    end: 3,
+                    start: 2,
+                    text: 'quick',
+                },
+                {
+                    end: 4,
+                    start: 3,
+                    text: 'brown',
+                },
+                {
+                    end: 6,
+                    start: 5,
+                    text: 'fox',
+                },
+            ];
+
+            const actual = mapTokensToGroundTruth({ end: 6, start: 0, text: 'The quick brown fox', tokens });
+            expect(actual.tokens).toEqual(tokens);
+        });
+
+        it('should update the incorrect word when the total number of words is the same', () => {
+            const actual = mapTokensToGroundTruth({
+                end: 6,
+                start: 0,
+                text: 'The quick brown fox.',
+                tokens: [
+                    {
+                        end: 1,
+                        start: 0,
+                        text: 'The',
+                    },
+                    {
+                        end: 3,
+                        start: 2,
+                        text: 'Buick',
+                    },
+                    {
+                        end: 4,
+                        start: 3,
+                        text: 'browse',
+                    },
+                    {
+                        end: 6,
+                        start: 5,
+                        text: 'fox.',
+                    },
+                ],
+            });
+            expect(actual).toEqual({
+                end: 6,
+                start: 0,
+                text: 'The quick brown fox.',
+                tokens: [
+                    {
+                        end: 1,
+                        start: 0,
+                        text: 'The',
+                    },
+                    {
+                        end: expect.closeTo(3.6, 0),
+                        start: expect.closeTo(2.3, 0),
+                        text: 'quick',
+                    },
+                    {
+                        end: 5,
+                        start: expect.closeTo(3.6, 0),
+                        text: 'brown',
+                    },
+                    {
+                        end: 6,
+                        start: 5,
+                        text: 'fox.',
+                    },
+                ],
+            });
+        });
+
+        it('should skip single-word gaps and interpolate multi-word gaps correctly', () => {
+            const segment: Segment = {
+                end: 10,
+                start: 0,
+                text: 'The quick brown fox jumps right over the lazy dog.',
+                tokens: [
+                    { end: 1, start: 0, text: 'The' },
+                    { end: 3, start: 2, text: 'quick' },
+                    { end: 4, start: 3, text: 'brown' },
+                    { end: 5.5, start: 5, text: 'jumps' },
+                    { end: 6, start: 5.5, text: 'right' },
+                    { end: 8, start: 9, text: 'lazy' },
+                    { end: 10, start: 9, text: 'dog' },
+                ],
+            };
+            const actual = mapTokensToGroundTruth(segment);
+            // round times for stable comparisons
+            const got = roundTokenTimes(actual.tokens as Token[]);
+            expect(got).toEqual([
+                { end: 1.0, start: 0.0, text: 'The' },
+                { end: 3.0, start: 2.0, text: 'quick' },
+                { end: 4.0, start: 3.0, text: 'brown' },
+                { end: 5.5, start: 5.0, text: 'jumps' },
+                { end: 6.0, start: 5.5, text: 'right' },
+                // two-word gap [over,the] from 6 to 9 => interval=3, step=1 => over@7, the@8
+                { end: 8.0, start: 7.0, text: 'over' },
+                { end: 9.0, start: 8.0, text: 'the' },
+                { end: 8.0, start: 9.0, text: 'lazy' },
+                { end: 10.0, start: 9.0, text: 'dog.' },
+            ]);
+        });
+
+        it('should strip punctuation when matching and preserve ground truth punctuation', () => {
+            const segment: Segment = {
+                end: 3,
+                start: 0,
+                text: '¡Hola! ¿Cómo estás?',
+                tokens: [
+                    { end: 1, start: 0, text: 'Hola' },
+                    { end: 2, start: 1, text: 'Como' },
+                    { end: 3, start: 2, text: 'estas' },
+                ],
+            };
+            const actual = mapTokensToGroundTruth(segment);
+            expect(actual.tokens).toEqual([
+                { end: 1, start: 0, text: '¡Hola!' },
+                {
+                    end: expect.closeTo(2.3333, 2),
+                    start: expect.closeTo(1.6666, 2),
+                    text: '¿Cómo',
+                },
+                {
+                    end: expect.closeTo(3, 2),
+                    start: expect.closeTo(2.3333, 2),
+                    text: 'estás?',
+                },
+            ]);
+        });
+
+        it('should fallback to estimate when no LCS matches at all', () => {
+            const segment: Segment = {
+                end: 5,
+                start: 0,
+                text: 'Foo bar baz',
+                tokens: [
+                    { end: 1, start: 0, text: 'one' },
+                    { end: 2, start: 1, text: 'two' },
+                ],
+            };
+            const estimated = estimateSegmentFromToken(segment);
+            const actual = mapTokensToGroundTruth(segment);
+            expect(actual).toEqual(estimated);
         });
     });
 });

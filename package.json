@@ -19,14 +19,14 @@
     },
     "description": "A lightweight TypeScript library designed to reconstruct paragraphs from OCRed inputs and transcriptions.",
     "engines": {
-        "bun": ">=1.2.9",
+        "bun": ">=1.2.11",
         "node": ">=23.0.0"
     },
     "files": [
         "dist/index.js",
         "dist/index.js.map",
         "dist/*.d.ts",
-        "LICENSE"
+        "LICENSE.MD"
     ],
     "keywords": [
         "transcription",

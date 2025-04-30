@@ -1,3 +1,38 @@
+export type Hints = Record<string, string[][]>;
+
+/**
+ * Represents a segment during the marking and processing stage.
+ * Contains an array of tokens that may include segment break markers.
+ */
+export type MarkedSegment = {
+    /**
+     * End time of the segment in seconds
+     */
+    end: number;
+
+    /**
+     * Start time of the segment in seconds
+     */
+    start: number;
+
+    /**
+     * Array of tokens and segment break markers that make up this segment
+     */
+    tokens: MarkedToken[];
+};
+
+/**
+ * Represents either a token or a segment break marker.
+ * Used during the processing of text to identify natural break points.
+ */
+export type MarkedToken = 'SEGMENT_BREAK' | Token;
+
+export type MarkTokensWithDividersOptions = {
+    fillers?: string[];
+    gapThreshold: number;
+    hints?: Hints;
+};
+
 /**
  * Represents a segment of text with timing information and optional word-level tokens.
  * A segment is a higher-level structure that contains a sequence of related tokens.
@@ -28,35 +63,3 @@ export type Token = {
      */
     text: string;
 };
-
-/**
- * Constant used to mark segment breaks during processing.
- */
-export const SEGMENT_BREAK = 'SEGMENT_BREAK';
-
-/**
- * Represents a segment during the marking and processing stage.
- * Contains an array of tokens that may include segment break markers.
- */
-export type MarkedSegment = {
-    /**
-     * End time of the segment in seconds
-     */
-    end: number;
-
-    /**
-     * Start time of the segment in seconds
-     */
-    start: number;
-
-    /**
-     * Array of tokens and segment break markers that make up this segment
-     */
-    tokens: MarkedToken[];
-};
-
-/**
- * Represents either a token or a segment break marker.
- * Used during the processing of text to identify natural break points.
- */
-export type MarkedToken = 'SEGMENT_BREAK' | Token;
