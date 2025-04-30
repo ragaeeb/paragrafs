@@ -133,20 +133,23 @@ console.log(transcript);
 
 ### Aligning AI Tokens to Human-Edited Text
 
-````typescript
+```typescript
 import { mapTokensToGroundTruth } from 'paragrafs';
 
 const rawSegment = {
-  start: 0,
-  end: 10,
-  text: 'The quick brown fox jumps right over the lazy dog.',
-  tokens: [ /* AI-generated word timestamps */ ]
+    start: 0,
+    end: 10,
+    text: 'The quick brown fox jumps right over the lazy dog.',
+    tokens: [
+        /* AI-generated word timestamps */
+    ],
 };
 
 const aligned = mapTokensToGroundTruth(rawSegment);
 console.log(aligned.tokens);
 // Each token now matches the ground-truth words exactly,
 // with missing words interpolated where needed.
+```
 
 ## API Reference
 
@@ -183,12 +186,10 @@ Combined utility that processes segments through all the necessary steps.
 #### `mapTokensToGroundTruth(segment: Segment): Segment`
 
 Synchronizes AI-generated word timestamps with the human-edited transcript (`segment.text`):
+
 - Uses a longest-common-subsequence (LCS) to find matching words and preserve their original timing.
 - Evenly interpolates timestamps for runs of missing words (only when two or more are missing).
 - Falls back to `estimateSegmentFromToken` if no matches are found.
-
-#### `groupMarkedTokensIntoSegments(markedTokens: MarkedToken[], maxSecondsPerSegment: number): MarkedSegment[]`
-  Groups marked tokens into logical segments based on maximum segment length.
 
 ### Types
 
@@ -210,7 +211,7 @@ type MarkedSegment = {
     end: number;
     tokens: MarkedToken[];
 };
-````
+```
 
 ### Utility Functions
 

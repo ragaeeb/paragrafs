@@ -41,13 +41,16 @@ export const isHintMatched = (tokens: Token[], hints: Hints, index: number) => {
  */
 export const interpolateMissingWords = (startTime: number, endTime: number, words: string[]): Token[] => {
     const wordCount = words.length;
-    if (wordCount <= 1) {
+    if (wordCount === 0 || endTime <= startTime) {
         return [];
     }
 
-    const interval = (endTime - startTime) / (wordCount + 1);
+    // place a single word in the middle of the interval
+    const interval = wordCount === 1 ? (endTime - startTime) / 2 : (endTime - startTime) / (wordCount + 1);
+    const positions = wordCount === 1 ? [interval] : Array.from({ length: wordCount }, (_, i) => interval * (i + 1));
+
     return words.map((word, index) => {
-        const start = startTime + interval * (index + 1);
+        const start = startTime + positions[index];
         return {
             end: start + interval,
             start,

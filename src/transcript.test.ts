@@ -870,7 +870,7 @@ describe('transcript', () => {
             });
         });
 
-        it('should skip single-word gaps and interpolate multi-word gaps correctly', () => {
+        it('should interpolate multi-word gaps correctly', () => {
             const segment: Segment = {
                 end: 10,
                 start: 0,
@@ -881,24 +881,64 @@ describe('transcript', () => {
                     { end: 4, start: 3, text: 'brown' },
                     { end: 5.5, start: 5, text: 'jumps' },
                     { end: 6, start: 5.5, text: 'right' },
-                    { end: 8, start: 9, text: 'lazy' },
+                    { end: 9, start: 8, text: 'lazy' },
                     { end: 10, start: 9, text: 'dog' },
                 ],
             };
             const actual = mapTokensToGroundTruth(segment);
-            // round times for stable comparisons
-            const got = roundTokenTimes(actual.tokens as Token[]);
+            const got = roundTokenTimes(actual.tokens);
+
             expect(got).toEqual([
-                { end: 1.0, start: 0.0, text: 'The' },
-                { end: 3.0, start: 2.0, text: 'quick' },
-                { end: 4.0, start: 3.0, text: 'brown' },
-                { end: 5.5, start: 5.0, text: 'jumps' },
-                { end: 6.0, start: 5.5, text: 'right' },
-                // two-word gap [over,the] from 6 to 9 => interval=3, step=1 => over@7, the@8
-                { end: 8.0, start: 7.0, text: 'over' },
-                { end: 9.0, start: 8.0, text: 'the' },
-                { end: 8.0, start: 9.0, text: 'lazy' },
-                { end: 10.0, start: 9.0, text: 'dog.' },
+                {
+                    end: 1,
+                    start: 0,
+                    text: 'The',
+                },
+                {
+                    end: 3,
+                    start: 2,
+                    text: 'quick',
+                },
+                {
+                    end: 4,
+                    start: 3,
+                    text: 'brown',
+                },
+                {
+                    end: 5,
+                    start: 4.5,
+                    text: 'fox',
+                },
+                {
+                    end: 5.5,
+                    start: 5,
+                    text: 'jumps',
+                },
+                {
+                    end: 6,
+                    start: 5.5,
+                    text: 'right',
+                },
+                {
+                    end: 7.33,
+                    start: 6.67,
+                    text: 'over',
+                },
+                {
+                    end: 8,
+                    start: 7.33,
+                    text: 'the',
+                },
+                {
+                    end: 9,
+                    start: 8,
+                    text: 'lazy',
+                },
+                {
+                    end: 10,
+                    start: 9,
+                    text: 'dog.',
+                },
             ]);
         });
 

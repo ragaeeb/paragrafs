@@ -1,3 +1,5 @@
+import { SEGMENT_BREAK } from './utils/constants';
+
 export type Hints = Record<string, string[][]>;
 
 /**
@@ -25,7 +27,7 @@ export type MarkedSegment = {
  * Represents either a token or a segment break marker.
  * Used during the processing of text to identify natural break points.
  */
-export type MarkedToken = 'SEGMENT_BREAK' | Token;
+export type MarkedToken = Token | typeof SEGMENT_BREAK;
 
 export type MarkTokensWithDividersOptions = {
     fillers?: string[];

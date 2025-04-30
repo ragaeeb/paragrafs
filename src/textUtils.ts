@@ -28,6 +28,16 @@ export const formatSecondsToTimestamp = (seconds: number): string => {
 
 /**
  * Strip leading/trailing punctuation/symbols, remove Arabic diacritics, NFC-normalize.
+ * Normalizes a word by removing diacritics and punctuation.
+ *
+ * This function:
+ * 1. Decomposes Unicode characters (NFD normalization)
+ * 2. Removes Arabic diacritics
+ * 3. Strips leading and trailing punctuation or symbols
+ * 4. Recomposes Unicode characters (NFC normalization)
+ *
+ * @param {string} w - The word to normalize
+ * @returns {string} The normalized word
  */
 export const normalizeWord = (w: string) => {
     return (
@@ -43,6 +53,15 @@ export const normalizeWord = (w: string) => {
     );
 };
 
+/**
+ * Creates a map of hints organized by their first word.
+ *
+ * Takes multiple hint strings, splits each into words, and organizes them into
+ * a map where the keys are the first words and values are arrays of word arrays.
+ *
+ * @param {...string} hints - One or more hint strings to process
+ * @returns {Hints} A map of hints organized by their first word
+ */
 export const createHints = (...hints: string[]) => {
     const hintMap: Hints = {};
     for (const hint of hints) {

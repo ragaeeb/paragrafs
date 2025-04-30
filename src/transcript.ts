@@ -41,7 +41,7 @@ export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment =
  * @param {Object} options - Configuration options
  * @param {string[]} [options.fillers] - Optional array of filler words to mark as segment breaks
  * @param {number} options.gapThreshold - Minimum time gap (in seconds) to consider a segment break
- * @param {string[]} [options.hints] - Optional array of multi-word phrases that trigger a break when fully matched
+ * @param {Hints} [options.hints] - Hints created with the createHints() function to indicate when to insert a new segment break.
  * @returns {MarkedToken[]} Tokens with segment break markers inserted
  */
 export const markTokensWithDividers = (

@@ -26,7 +26,7 @@
         "dist/index.js",
         "dist/index.js.map",
         "dist/*.d.ts",
-        "LICENSE.MD"
+        "LICENSE.md"
     ],
     "keywords": [
         "transcription",
