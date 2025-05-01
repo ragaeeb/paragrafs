@@ -4,6 +4,7 @@ import type { MarkedSegment, MarkedToken, Segment, Token } from './types';
 
 import { createHints } from './textUtils';
 import {
+    cleanupIsolatedTokens,
     estimateSegmentFromToken,
     formatSegmentsToTimestampedTranscript,
     groupMarkedTokensIntoSegments,
@@ -539,7 +540,7 @@ describe('transcript', () => {
             minWordsPerSegment: 3,
         };
 
-        it('should process segments with fillers correctly', () => {
+        it('should process segments with fillers but collapse to prevent isolated tokens', () => {
             const segments: Segment[] = [
                 {
                     end: 2,
@@ -554,16 +555,66 @@ describe('transcript', () => {
             ];
 
             const result = markAndCombineSegments(segments, options);
+            expect(result).toEqual([
+                {
+                    end: 2,
+                    start: 0,
+                    tokens: [
+                        {
+                            end: 0.5,
+                            start: 0,
+                            text: 'Hello',
+                        },
+                        {
+                            end: 2,
+                            start: 1,
+                            text: 'world',
+                        },
+                    ],
+                },
+            ]);
+        });
 
-            expect(result).toHaveLength(1);
-            expect(result[0].tokens).toContain(SEGMENT_BREAK);
+        it('should process segments with fillers correctly', () => {
+            const segments: Segment[] = [
+                {
+                    end: 2,
+                    start: 0,
+                    text: 'Hello uh world today',
+                    tokens: [
+                        { end: 0.5, start: 0, text: 'Hello' },
+                        { end: 1, start: 0.5, text: 'uh' },
+                        { end: 2, start: 1, text: 'world' },
+                        { end: 3, start: 2, text: 'today' },
+                    ],
+                },
+            ];
 
-            // Verify filler word was replaced with segment break
-            const tokenTexts = result[0].tokens
-                .filter((token) => token !== SEGMENT_BREAK)
-                .map((token) => (token as any).text);
-
-            expect(tokenTexts).toEqual(['Hello', 'world']);
+            const result = markAndCombineSegments(segments, options);
+            expect(result).toEqual([
+                {
+                    end: 3,
+                    start: 0,
+                    tokens: [
+                        {
+                            end: 0.5,
+                            start: 0,
+                            text: 'Hello',
+                        },
+                        SEGMENT_BREAK,
+                        {
+                            end: 2,
+                            start: 1,
+                            text: 'world',
+                        },
+                        {
+                            end: 3,
+                            start: 2,
+                            text: 'today',
+                        },
+                    ],
+                },
+            ]);
         });
 
         it('should support hints', () => {
@@ -765,33 +816,56 @@ describe('transcript', () => {
             ];
 
             const result = markAndCombineSegments(segments, options);
-
-            // Expected behaviors:
-            // 1. Segment break after "world." due to punctuation
-            // 2. Segment break around "umm" due to filler
-            // 3. Segment break after "you?" due to punctuation
-            // 4. Segment break before second segment due to gap
-
-            // Count all segment breaks
-            const totalBreaks = result.reduce(
-                (count, segment) => count + segment.tokens.filter((token) => token === SEGMENT_BREAK).length,
-                0,
-            );
-
-            // We should have multiple breaks in this complex scenario
-            expect(totalBreaks).toBeGreaterThan(3);
-
-            // Verify that both segments were processed correctly
-            const allNonBreakTokens = result.flatMap(
-                (segment) => segment.tokens.filter((token) => token !== SEGMENT_BREAK) as any[],
-            );
-
-            const allTexts = allNonBreakTokens.map((token) => token.text);
-
-            expect(allTexts).toContain('Hello');
-            expect(allTexts).toContain('fine');
-            // Filler should be removed
-            expect(allTexts).not.toContain('umm');
+            expect(result).toEqual([
+                {
+                    end: 9,
+                    start: 0,
+                    tokens: [
+                        {
+                            end: 1,
+                            start: 0,
+                            text: 'Hello',
+                        },
+                        {
+                            end: 2,
+                            start: 1,
+                            text: 'world.',
+                        },
+                        SEGMENT_BREAK,
+                        {
+                            end: 4,
+                            start: 3,
+                            text: 'How',
+                        },
+                        {
+                            end: 4.5,
+                            start: 4,
+                            text: 'are',
+                        },
+                        {
+                            end: 5,
+                            start: 4.5,
+                            text: 'you?',
+                        },
+                        SEGMENT_BREAK,
+                        {
+                            end: 8.3,
+                            start: 8,
+                            text: 'I',
+                        },
+                        {
+                            end: 8.6,
+                            start: 8.3,
+                            text: 'am',
+                        },
+                        {
+                            end: 9,
+                            start: 8.6,
+                            text: 'fine',
+                        },
+                    ],
+                },
+            ]);
         });
 
         it('should handle empty input gracefully', () => {
@@ -1147,6 +1221,141 @@ describe('transcript', () => {
             const estimated = estimateSegmentFromToken(segment);
             const actual = mapTokensToGroundTruth(segment);
             expect(actual).toEqual(estimated);
+        });
+    });
+
+    describe('cleanupIsolatedTokens', () => {
+        it('should clean up the isolated token since it will be followed by a break', () => {
+            const actual = cleanupIsolatedTokens([
+                {
+                    end: 1,
+                    start: 0,
+                    text: 'The',
+                },
+                {
+                    end: 3,
+                    start: 2,
+                    text: 'quick',
+                },
+                {
+                    end: 5,
+                    start: 4,
+                    text: 'brown',
+                },
+                {
+                    end: 7,
+                    start: 6,
+                    text: 'fox',
+                },
+                {
+                    end: 9,
+                    start: 8,
+                    text: 'jumps',
+                },
+                {
+                    end: 11,
+                    start: 10,
+                    text: 'right',
+                },
+                {
+                    end: 13,
+                    start: 12,
+                    text: 'over',
+                },
+                {
+                    end: 15,
+                    start: 14,
+                    text: 'the',
+                },
+                {
+                    end: 17,
+                    start: 16,
+                    text: 'lazy',
+                },
+                {
+                    end: 19,
+                    start: 18,
+                    text: 'dog.',
+                },
+                SEGMENT_BREAK,
+                {
+                    end: 20,
+                    start: 19,
+                    text: 'Okay.',
+                },
+                SEGMENT_BREAK,
+                ALWAYS_BREAK,
+                SEGMENT_BREAK,
+                {
+                    end: 25,
+                    start: 24,
+                    text: 'Alright',
+                },
+            ]);
+
+            expect(actual).toEqual([
+                {
+                    end: 1,
+                    start: 0,
+                    text: 'The',
+                },
+                {
+                    end: 3,
+                    start: 2,
+                    text: 'quick',
+                },
+                {
+                    end: 5,
+                    start: 4,
+                    text: 'brown',
+                },
+                {
+                    end: 7,
+                    start: 6,
+                    text: 'fox',
+                },
+                {
+                    end: 9,
+                    start: 8,
+                    text: 'jumps',
+                },
+                {
+                    end: 11,
+                    start: 10,
+                    text: 'right',
+                },
+                {
+                    end: 13,
+                    start: 12,
+                    text: 'over',
+                },
+                {
+                    end: 15,
+                    start: 14,
+                    text: 'the',
+                },
+                {
+                    end: 17,
+                    start: 16,
+                    text: 'lazy',
+                },
+                {
+                    end: 19,
+                    start: 18,
+                    text: 'dog.',
+                },
+                {
+                    end: 20,
+                    start: 19,
+                    text: 'Okay.',
+                },
+                ALWAYS_BREAK,
+                {
+                    end: 25,
+                    start: 24,
+                    text: 'Alright',
+                },
+            ]);
         });
     });
 });

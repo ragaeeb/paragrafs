@@ -303,15 +303,45 @@ export const markAndCombineSegments = (
     },
 ) => {
     const tokens = segments.flatMap((segment) => segment.tokens!);
-    const markedTokens = markTokensWithDividers(tokens, {
+    let markedTokens = markTokensWithDividers(tokens, {
         fillers: options.fillers,
         gapThreshold: options.gapThreshold,
         ...(options.hints && { hints: options.hints }),
     });
+    markedTokens = cleanupIsolatedTokens(markedTokens);
     const markedSegments = groupMarkedTokensIntoSegments(markedTokens, options.maxSecondsPerSegment);
     const combinedSegments = mergeShortSegmentsWithPrevious(markedSegments, options.minWordsPerSegment);
 
     return combinedSegments;
+};
+
+/**
+ * Cleans up marked tokens by removing unnecessary segment breaks that would
+ * cause individual tokens to appear on their own lines.
+ *
+ * @param {MarkedToken[]} markedTokens - The array of marked tokens to clean up
+ * @returns {MarkedToken[]} A new array with unnecessary breaks removed
+ */
+export const cleanupIsolatedTokens = (markedTokens: MarkedToken[]): MarkedToken[] => {
+    const result: MarkedToken[] = [];
+
+    for (let i = 0; i < markedTokens.length; i++) {
+        const current = markedTokens[i];
+        const next = markedTokens[i + 1];
+        const future = markedTokens[i + 2];
+
+        if (current === SEGMENT_BREAK && (next === ALWAYS_BREAK || next === SEGMENT_BREAK)) {
+            // skip current break since we're placing a break anyways
+        } else if (current === SEGMENT_BREAK && (future === SEGMENT_BREAK || future === ALWAYS_BREAK || !future)) {
+            // skip current break since we don't want to put a word by itself
+        } else if (current === SEGMENT_BREAK && result.at(-1) === SEGMENT_BREAK) {
+            // skip duplicate break
+        } else {
+            result.push(current);
+        }
+    }
+
+    return result;
 };
 
 /**
