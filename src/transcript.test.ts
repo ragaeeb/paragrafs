@@ -13,7 +13,7 @@ import {
     markTokensWithDividers,
     mergeShortSegmentsWithPrevious,
 } from './transcript';
-import { SEGMENT_BREAK } from './utils/constants';
+import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 
 function roundTokenTimes(tokens: Token[]): Token[] {
     return tokens.map((t) => ({
@@ -88,6 +88,96 @@ describe('transcript', () => {
             ]);
         });
 
+        it('should insert segment breaks based on punctuation, hint and gap', () => {
+            const tokens = [
+                { end: 1, start: 0, text: 'The' },
+                { end: 3, start: 2, text: 'quick' },
+                { end: 5, start: 4, text: 'brown' },
+                { end: 7, start: 6, text: 'fox' },
+                { end: 9, start: 8, text: 'jumps' },
+                { end: 11, start: 10, text: 'right' },
+                { end: 13, start: 12, text: 'over' },
+                { end: 15, start: 14, text: 'the' },
+                { end: 17, start: 16, text: 'lazy' },
+                { end: 19, start: 18, text: 'dog.' },
+                { end: 20, start: 19, text: 'Okay.' },
+                { end: 25, start: 24, text: 'Alright' },
+            ];
+
+            const actual = markTokensWithDividers(tokens, {
+                fillers: [],
+                gapThreshold: 3,
+                hints: createHints('Alright'),
+            });
+
+            expect(actual).toEqual([
+                {
+                    end: 1,
+                    start: 0,
+                    text: 'The',
+                },
+                {
+                    end: 3,
+                    start: 2,
+                    text: 'quick',
+                },
+                {
+                    end: 5,
+                    start: 4,
+                    text: 'brown',
+                },
+                {
+                    end: 7,
+                    start: 6,
+                    text: 'fox',
+                },
+                {
+                    end: 9,
+                    start: 8,
+                    text: 'jumps',
+                },
+                {
+                    end: 11,
+                    start: 10,
+                    text: 'right',
+                },
+                {
+                    end: 13,
+                    start: 12,
+                    text: 'over',
+                },
+                {
+                    end: 15,
+                    start: 14,
+                    text: 'the',
+                },
+                {
+                    end: 17,
+                    start: 16,
+                    text: 'lazy',
+                },
+                {
+                    end: 19,
+                    start: 18,
+                    text: 'dog.',
+                },
+                SEGMENT_BREAK,
+                {
+                    end: 20,
+                    start: 19,
+                    text: 'Okay.',
+                },
+                SEGMENT_BREAK,
+                ALWAYS_BREAK,
+                SEGMENT_BREAK,
+                {
+                    end: 25,
+                    start: 24,
+                    text: 'Alright',
+                },
+            ]);
+        });
+
         it('should insert a marker and insert the hint', () => {
             const tokens = [
                 { end: 1, start: 0, text: 'The' },
@@ -114,7 +204,7 @@ describe('transcript', () => {
                 { end: 3, start: 2, text: 'quick' },
                 { end: 5, start: 4, text: 'brown' },
                 { end: 6.5, start: 6, text: 'fox' },
-                SEGMENT_BREAK,
+                ALWAYS_BREAK,
                 { end: 7, start: 6.5, text: 'Alright' },
                 { end: 9, start: 8, text: 'Jumps' },
                 { end: 10, start: 9, text: 'right' },
@@ -383,6 +473,62 @@ describe('transcript', () => {
                 },
             ]);
         });
+
+        it('should always create a new line when encountering the always break token even if the max seconds per line is not encountered', () => {
+            const input = [
+                {
+                    end: 13,
+                    start: 0.5,
+                    tokens: [
+                        { end: 1, start: 0.5, text: 'The' },
+                        { end: 3, start: 2, text: 'quick' },
+                        { end: 5, start: 4, text: 'brown' },
+                        { end: 6.5, start: 6, text: 'fox!' },
+                        SEGMENT_BREAK,
+                        ALWAYS_BREAK,
+                        { end: 9, start: 8, text: 'Jumps' },
+                        { end: 10, start: 9, text: 'right' },
+                        { end: 11, start: 10, text: 'over' },
+                        { end: 13, start: 12, text: 'the' },
+                        SEGMENT_BREAK,
+                    ],
+                },
+                {
+                    end: 19,
+                    start: 16,
+                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
+                },
+            ] as MarkedSegment[];
+
+            const actual = mapSegmentsIntoFormattedSegments(input, 10);
+
+            expect(actual).toEqual([
+                {
+                    end: 13,
+                    start: 0.5,
+                    text: 'The quick brown fox!\nJumps right over the',
+                    tokens: [
+                        { end: 1, start: 0.5, text: 'The' },
+                        { end: 3, start: 2, text: 'quick' },
+                        { end: 5, start: 4, text: 'brown' },
+                        { end: 6.5, start: 6, text: 'fox!' },
+                        { end: 9, start: 8, text: 'Jumps' },
+                        { end: 10, start: 9, text: 'right' },
+                        { end: 11, start: 10, text: 'over' },
+                        { end: 13, start: 12, text: 'the' },
+                    ],
+                },
+                {
+                    end: 19,
+                    start: 16,
+                    text: 'lazy dog.',
+                    tokens: [
+                        { end: 17, start: 16, text: 'lazy' },
+                        { end: 19, start: 18, text: 'dog.' },
+                    ],
+                },
+            ]);
+        });
     });
 
     describe('markAndCombineSegments', () => {
@@ -455,7 +601,7 @@ describe('transcript', () => {
                     tokens: [
                         { end: 1, start: 0, text: 'The' },
                         { end: 2, start: 1.5, text: 'quick' },
-                        SEGMENT_BREAK,
+                        ALWAYS_BREAK,
                         { end: 3, start: 2, text: 'Fox' },
                         { end: 4, start: 3, text: 'jumps' },
                         { end: 6, start: 5, text: 'right' },
@@ -717,6 +863,25 @@ describe('transcript', () => {
             ];
 
             const result = formatSegmentsToTimestampedTranscript(segments, 5);
+            expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
+        });
+
+        it('should always create a new segment when encountering a always break token', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 15,
+                    start: 0,
+                    tokens: [
+                        { end: 2, start: 0, text: 'Hello' },
+                        { end: 5, start: 2, text: 'there.' },
+                        ALWAYS_BREAK,
+                        { end: 12, start: 6, text: 'How' },
+                        { end: 15, start: 12, text: 'are you?' },
+                    ],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 100);
             expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
         });
 
