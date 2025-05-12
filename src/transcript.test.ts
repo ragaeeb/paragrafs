@@ -12,6 +12,7 @@ import {
     mapTokensToGroundTruth,
     markAndCombineSegments,
     markTokensWithDividers,
+    mergeSegments,
     mergeShortSegmentsWithPrevious,
 } from './transcript';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
@@ -1354,6 +1355,85 @@ describe('transcript', () => {
                     end: 25,
                     start: 24,
                     text: 'Alright',
+                },
+            ]);
+        });
+    });
+
+    describe('mergeSegments', () => {
+        it('should merge the segments', () => {
+            const segments = [
+                {
+                    end: 10,
+                    start: 0,
+                    text: 'The quick',
+                    tokens: [
+                        { end: 5, start: 0, text: 'The' },
+                        { end: 10, start: 6, text: 'quick' },
+                    ],
+                },
+                {
+                    end: 20,
+                    start: 11,
+                    text: 'brown fox',
+                    tokens: [
+                        { end: 15, start: 11, text: 'brown' },
+                        { end: 20, start: 16, text: 'fox' },
+                    ],
+                },
+            ];
+
+            const actual = mergeSegments(segments, '\n');
+
+            expect(actual).toEqual({
+                end: 20,
+                start: 0,
+                text: 'The quick\nbrown fox',
+                tokens: [
+                    { end: 5, start: 0, text: 'The' },
+                    { end: 10, start: 6, text: 'quick' },
+                    { end: 15, start: 11, text: 'brown' },
+                    { end: 20, start: 16, text: 'fox' },
+                ],
+            });
+        });
+    });
+
+    describe('splitSegment', () => {
+        it('should split the segment', () => {
+            const actual = splitSegment(
+                {
+                    end: 20,
+                    start: 0,
+                    text: 'The quick\nbrown fox',
+                    tokens: [
+                        { end: 5, start: 0, text: 'The' },
+                        { end: 10, start: 6, text: 'quick' },
+                        { end: 15, start: 11, text: 'brown' },
+                        { end: 20, start: 16, text: 'fox' },
+                    ],
+                },
+                11,
+            );
+
+            expect(actual).toEqual([
+                {
+                    end: 10,
+                    start: 0,
+                    text: 'The quick',
+                    tokens: [
+                        { end: 5, start: 0, text: 'The' },
+                        { end: 10, start: 6, text: 'quick' },
+                    ],
+                },
+                {
+                    end: 20,
+                    start: 11,
+                    text: 'brown fox',
+                    tokens: [
+                        { end: 15, start: 11, text: 'brown' },
+                        { end: 20, start: 16, text: 'fox' },
+                    ],
                 },
             ]);
         });

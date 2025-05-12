@@ -355,7 +355,7 @@ export const cleanupIsolatedTokens = (markedTokens: MarkedToken[]): MarkedToken[
  * @param segment - A `Segment` object with ground truth `text` and AI-generated `tokens`
  * @returns A new `Segment` with the `tokens` adjusted to match the ground truth `text`
  */
-export function mapTokensToGroundTruth(segment: Segment): Segment {
+export const mapTokensToGroundTruth = (segment: Segment): Segment => {
     const { end: segmentEnd, start: segmentStart, text, tokens } = segment;
 
     const groundTruthWords = text.trim().split(/\s+/).filter(Boolean);
@@ -427,4 +427,11 @@ export function mapTokensToGroundTruth(segment: Segment): Segment {
     }
 
     return { ...segment, tokens: alignedTokens };
-}
+};
+
+export const mergeSegments = (segments: Segment[], delimiter = ' '): Segment => {
+    const text = segments.map((segment) => segment.text).join(delimiter);
+    const tokens = segments.flatMap((segment) => segment.tokens);
+
+    return { end: segments.at(-1)!.end, start: segments[0].start, text, tokens };
+};
