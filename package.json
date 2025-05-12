@@ -17,9 +17,9 @@
         "tsup": "^8.4.0",
         "typescript-eslint": "^8.32.1"
     },
-    "description": "A lightweight TypeScript library designed to reconstruct paragraphs from OCRed inputs and transcriptions.",
+    "description": "A lightweight TypeScript library designed to reconstruct paragraphs from AI transcriptions.",
     "engines": {
-        "bun": ">=1.2.11",
+        "bun": ">=1.2.13",
         "node": ">=22.0.0"
     },
     "files": [
