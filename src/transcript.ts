@@ -1,6 +1,6 @@
 import type { MarkedSegment, MarkedToken, MarkTokensWithDividersOptions, Segment, Token } from './types';
 
-import { formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord } from './textUtils';
+import { createHints, formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord } from './textUtils';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 import { buildLcsTable, extractLcsMatches } from './utils/lcs';
 import { interpolateMissingWords, isHintMatched } from './utils/transcriptUtils';
@@ -429,9 +429,165 @@ export const mapTokensToGroundTruth = (segment: Segment): Segment => {
     return { ...segment, tokens: alignedTokens };
 };
 
+/**
+ * Merges the segments into a single segment.
+ *
+ * @param segment - The segment to split
+ * @param splitTime - The time (in seconds) at which to split the segment
+ * @returns An array containing exactly two segments
+ */
 export const mergeSegments = (segments: Segment[], delimiter = ' '): Segment => {
     const text = segments.map((segment) => segment.text).join(delimiter);
     const tokens = segments.flatMap((segment) => segment.tokens);
 
     return { end: segments.at(-1)!.end, start: segments[0].start, text, tokens };
+};
+
+/**
+ * Splits a segment at a specific time point into exactly two segments.
+ *
+ * This function does the opposite of mergeSegments, taking a single segment
+ * and dividing it into two segments at the specified split time.
+ *
+ * @param segment - The segment to split
+ * @param splitTime - The time (in seconds) at which to split the segment
+ * @returns An array containing exactly two segments
+ */
+export const splitSegment = (segment: Segment, splitTime: number): Segment[] => {
+    const firstTokens = segment.tokens.filter((token) => token.start < splitTime);
+    const secondTokens = segment.tokens.filter((token) => token.start >= splitTime);
+
+    const firstText = firstTokens.map((token) => token.text).join(' ');
+    const secondText = secondTokens.map((token) => token.text).join(' ');
+
+    return [
+        {
+            end: firstTokens.at(-1)!.end,
+            start: segment.start,
+            text: firstText,
+            tokens: firstTokens,
+        },
+        {
+            end: segment.end,
+            start: secondTokens[0].start,
+            text: secondText,
+            tokens: secondTokens,
+        },
+    ];
+};
+
+/**
+ * Searches through an array of tokens and returns the first one whose text sequence
+ * matches the given query string.
+ *
+ * This function will split the `query` into one or more hint phrases (via `createHints`),
+ * then scan `tokens` in order, returning the first token at which any hint sequence
+ * fully matches the subsequent tokens.
+ *
+ * @param tokens
+ *   An ordered array of `Token` objects to search.
+ * @param query
+ *   A string containing one or more words to match.  If you pass multiple words
+ *   (e.g. `"hello world"`), it will only match if `"hello"` at position `i` is
+ *   immediately followed by `"world"` at position `i+1`.
+ * @returns
+ *   The first `Token` in the array where the hint sequence matches, or `null`
+ *   if no matching sequence is found.
+ *
+ * @example
+ * ```ts
+ * const tokens: Token[] = [
+ *   { start: 0, end: 1, text: 'the' },
+ *   { start: 1, end: 2, text: 'quick' },
+ *   { start: 2, end: 3, text: 'brown' },
+ *   { start: 3, end: 4, text: 'fox' },
+ * ];
+ *
+ * getFirstMatchingToken(tokens, 'quick brown');
+ * // → { start: 1, end: 2, text: 'quick' }
+ *
+ * getFirstMatchingToken(tokens, 'lazy dog');
+ * // → null
+ * ```
+ */
+export const getFirstMatchingToken = (tokens: Token[], query: string): null | Token => {
+    const hints = createHints(query);
+
+    for (let i = 0; i < tokens.length; i++) {
+        if (isHintMatched(tokens, hints, i)) {
+            return tokens[i];
+        }
+    }
+
+    return null;
+};
+
+/**
+ * Finds and returns the first token in a segment whose character‐range fully contains
+ * the given [selectionStart, selectionEnd) range.
+ *
+ * This is useful when you have a selection in the raw `segment.text` (for example, from
+ * an <input>’s `selectionStart` and `selectionEnd`) and you want to map that back to the
+ * corresponding timed `Token`.
+ *
+ * @param segment  The Segment object containing the full `text` and an ordered list of `tokens`.
+ * @param selectionStart
+ *   The zero‐based index into `segment.text` where the selection begins (inclusive).
+ * @param selectionEnd
+ *   The zero‐based index into `segment.text` where the selection ends (exclusive).
+ * @returns
+ *   The first `Token` whose span in `segment.text` covers the entire selection range or `null` if it is not found.
+ *
+ * @example
+ * ```ts
+ * const segment: Segment = {
+ *   text: 'the fox and the rabbit',
+ *   start: 0,
+ *   end: 6,
+ *   tokens: [
+ *     { start: 0, end: 1, text: 'the' },
+ *     { start: 2, end: 3, text: 'fox' },
+ *     { start: 3, end: 4, text: 'and' },
+ *     { start: 4, end: 5, text: 'the' },
+ *     { start: 5, end: 6, text: 'rabbit' },
+ *   ],
+ * };
+ *
+ * // Suppose the user selected the second "the" in an <input>,
+ * // which corresponds to characters 12–15 (exclusive end):
+ * const tok = getFirstTokenForSelection(segment, 12, 15);
+ * // tok === { start: 4, end: 5, text: 'the' }
+ * ```
+ */
+export const getFirstTokenForSelection = (
+    segment: Segment,
+    selectionStart: number,
+    selectionEnd: number, // exclusive
+): null | Token => {
+    const { text, tokens } = segment;
+
+    // Keep track of where we last matched, so duplicate words
+    // resolve to the correct occurrence.
+    let searchPos = 0;
+
+    for (const token of tokens) {
+        // Find the next occurrence of this token in the text
+        const charStart = text.indexOf(token.text, searchPos);
+
+        if (charStart === -1) {
+            continue; // mismatch guard
+        }
+
+        const charEnd = charStart + token.text.length; // exclusive
+
+        // Advance past this token (plus one for the space separator)
+        searchPos = charEnd + 1;
+
+        // Because selectionEnd is exclusive, we can test containment simply:
+        if (selectionStart >= charStart && selectionEnd <= charEnd) {
+            return token;
+        }
+    }
+
+    return null;
 };
