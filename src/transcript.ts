@@ -430,11 +430,11 @@ export const mapTokensToGroundTruth = (segment: Segment): Segment => {
 };
 
 /**
- * Merges the segments into a single segment.
+ * Merges multiple segments into a single segment.
  *
- * @param segment - The segment to split
- * @param splitTime - The time (in seconds) at which to split the segment
- * @returns An array containing exactly two segments
+ * @param segments - Array of segments to merge into one
+ * @param delimiter - Optional string to join segment texts (defaults to space)
+ * @returns A single merged segment containing all tokens
  */
 export const mergeSegments = (segments: Segment[], delimiter = ' '): Segment => {
     const text = segments.map((segment) => segment.text).join(delimiter);
