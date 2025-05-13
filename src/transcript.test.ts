@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 
 import type { MarkedSegment, MarkedToken, Segment, Token } from './types';
 
@@ -7,12 +7,16 @@ import {
     cleanupIsolatedTokens,
     estimateSegmentFromToken,
     formatSegmentsToTimestampedTranscript,
+    getFirstMatchingToken,
+    getFirstTokenForSelection,
     groupMarkedTokensIntoSegments,
     mapSegmentsIntoFormattedSegments,
     mapTokensToGroundTruth,
     markAndCombineSegments,
     markTokensWithDividers,
+    mergeSegments,
     mergeShortSegmentsWithPrevious,
+    splitSegment,
 } from './transcript';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 
@@ -1356,6 +1360,181 @@ describe('transcript', () => {
                     text: 'Alright',
                 },
             ]);
+        });
+    });
+
+    describe('mergeSegments', () => {
+        it('should merge the segments', () => {
+            const segments = [
+                {
+                    end: 10,
+                    start: 0,
+                    text: 'The quick',
+                    tokens: [
+                        { end: 5, start: 0, text: 'The' },
+                        { end: 10, start: 6, text: 'quick' },
+                    ],
+                },
+                {
+                    end: 20,
+                    start: 11,
+                    text: 'brown fox',
+                    tokens: [
+                        { end: 15, start: 11, text: 'brown' },
+                        { end: 20, start: 16, text: 'fox' },
+                    ],
+                },
+            ];
+
+            const actual = mergeSegments(segments, '\n');
+
+            expect(actual).toEqual({
+                end: 20,
+                start: 0,
+                text: 'The quick\nbrown fox',
+                tokens: [
+                    { end: 5, start: 0, text: 'The' },
+                    { end: 10, start: 6, text: 'quick' },
+                    { end: 15, start: 11, text: 'brown' },
+                    { end: 20, start: 16, text: 'fox' },
+                ],
+            });
+        });
+    });
+
+    describe('splitSegment', () => {
+        it('should split the segment', () => {
+            const actual = splitSegment(
+                {
+                    end: 20,
+                    start: 0,
+                    text: 'The quick\nbrown fox',
+                    tokens: [
+                        { end: 5, start: 0, text: 'The' },
+                        { end: 10, start: 6, text: 'quick' },
+                        { end: 15, start: 11, text: 'brown' },
+                        { end: 20, start: 16, text: 'fox' },
+                    ],
+                },
+                11,
+            );
+
+            expect(actual).toEqual([
+                {
+                    end: 10,
+                    start: 0,
+                    text: 'The quick',
+                    tokens: [
+                        { end: 5, start: 0, text: 'The' },
+                        { end: 10, start: 6, text: 'quick' },
+                    ],
+                },
+                {
+                    end: 20,
+                    start: 11,
+                    text: 'brown fox',
+                    tokens: [
+                        { end: 15, start: 11, text: 'brown' },
+                        { end: 20, start: 16, text: 'fox' },
+                    ],
+                },
+            ]);
+        });
+    });
+
+    describe('getFirstMatchingToken', () => {
+        let tokens;
+
+        beforeEach(() => {
+            tokens = [
+                { end: 11, start: 10, text: 'the' },
+                { end: 13, start: 12, text: 'quick' },
+                { end: 15, start: 14, text: 'brown' },
+                { end: 17, start: 16, text: 'fox' },
+                { end: 19, start: 18, text: 'jumps' },
+                { end: 21, start: 20, text: 'right' },
+                { end: 23, start: 22, text: 'over' },
+                { end: 25, start: 24, text: 'the' },
+                { end: 27, start: 26, text: 'lazy' },
+                { end: 29, start: 28, text: 'dog' },
+            ];
+        });
+
+        it('should return the first text object for a single text match', () => {
+            expect(getFirstMatchingToken(tokens, 'fox')).toEqual({ end: 17, start: 16, text: 'fox' });
+        });
+
+        it('should return the first text object for a consecutive text match', () => {
+            expect(getFirstMatchingToken(tokens, 'the lazy')).toEqual({ end: 25, start: 24, text: 'the' });
+        });
+
+        it('should return null if the text is not found', () => {
+            expect(getFirstMatchingToken(tokens, 'unicorn')).toBeNull();
+        });
+
+        it('should return the first text object if all the consecutive tokens match', () => {
+            expect(getFirstMatchingToken(tokens, 'the quick brown')).toEqual({ end: 11, start: 10, text: 'the' });
+        });
+
+        it('should correctly handle the first text of the text', () => {
+            expect(getFirstMatchingToken(tokens, 'the')).toEqual({ end: 11, start: 10, text: 'the' });
+        });
+
+        it('should correctly handle the last text of the text', () => {
+            expect(getFirstMatchingToken(tokens, 'dog')).toEqual({ end: 29, start: 28, text: 'dog' });
+        });
+
+        it('should return null for a non-consecutive text match', () => {
+            expect(getFirstMatchingToken(tokens, 'the dog')).toBeNull();
+        });
+    });
+
+    describe('getFirstTokenForSelection', () => {
+        let segment: Segment;
+
+        beforeEach(() => {
+            segment = {
+                end: 6,
+                start: 0,
+                text: 'the fox and the rabbit',
+                tokens: [
+                    { end: 1, start: 0, text: 'the' },
+                    { end: 3, start: 2, text: 'fox' },
+                    { end: 4, start: 3, text: 'and' },
+                    { end: 5, start: 4, text: 'the' },
+                    { end: 6, start: 5, text: 'rabbit' },
+                ],
+            };
+        });
+
+        it('selecting the first "the" (chars 0–3) returns the first token', () => {
+            const tok = getFirstTokenForSelection(segment, 0, 3);
+            expect(tok).toEqual({ end: 1, start: 0, text: 'the' });
+        });
+
+        it('selecting "fox" (chars 4–7) returns the fox token', () => {
+            const tok = getFirstTokenForSelection(segment, 4, 7);
+            expect(tok).toEqual({ end: 3, start: 2, text: 'fox' });
+        });
+
+        it('selecting "and" (chars 8–11) returns the and token', () => {
+            const tok = getFirstTokenForSelection(segment, 8, 11);
+            expect(tok).toEqual({ end: 4, start: 3, text: 'and' });
+        });
+
+        it('selecting the second "the" (chars 12–15) returns the fourth token', () => {
+            const tok = getFirstTokenForSelection(segment, 12, 15);
+            expect(tok).toEqual({ end: 5, start: 4, text: 'the' });
+        });
+
+        it('selecting "rabbit" (chars 16–22) returns the rabbit token', () => {
+            const tok = getFirstTokenForSelection(segment, 16, 22);
+            expect(tok).toEqual({ end: 6, start: 5, text: 'rabbit' });
+        });
+
+        it('selection that does not exactly match one token throws', () => {
+            // e.g. spans part of "fox" and part of "and"
+            expect(getFirstTokenForSelection(segment, 6, 9)).toBeNull();
         });
     });
 });

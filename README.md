@@ -13,7 +13,7 @@
 ![GitHub stars](https://img.shields.io/github/stars/ragaeeb/paragrafs?style=social)
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/ragaeeb/paragrafs?utm_source=oss&utm_medium=github&utm_campaign=ragaeeb%2Fparagrafs&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
-A lightweight TypeScript library designed to reconstruct paragraphs from OCRed inputs and transcriptions. It helps format unstructured text with appropriate paragraph breaks, handles timestamps for transcripts, and optimizes for readability.
+A lightweight TypeScript library designed to reconstruct paragraphs from AI transcriptions. It helps format unstructured text with appropriate paragraph breaks, handles timestamps for transcripts, and optimizes for readability.
 
 ## Features
 
@@ -58,7 +58,7 @@ bun add paragrafs
 ```typescript
 import { estimateSegmentFromToken, markAndCombineSegments, mapSegmentsIntoFormattedSegments } from 'paragrafs';
 
-// Example token from OCR or transcription
+// Example token from transcription
 const token = {
     start: 0,
     end: 5,
@@ -225,7 +225,6 @@ Formats seconds into a human-readable timestamp (H:MM:SS).
 
 ## Use Cases
 
-- **OCR Post-Processing**: Clean up scanned text by properly reconstructing paragraphs
 - **Transcript Formatting**: Convert raw transcriptions into readable text
 - **Subtitle Generation**: Create properly formatted subtitles from audio transcriptions
 - **Document Reconstruction**: Rebuild properly formatted documents from extracted text
