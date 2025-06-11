@@ -96,3 +96,158 @@ export const interpolateMissingWords = (startTime: number, endTime: number, word
         };
     });
 };
+
+type ConfidenceToken = Token & {
+    confidence?: number;
+};
+
+/**
+ * Normalizes Arabic text by removing diacritics for comparison.
+ */
+const normalizeDiacritics = (text: string): string => {
+    return text.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '');
+};
+
+/**
+ * Normalizes text for comparison (removes diacritics and converts to lowercase).
+ */
+const normalizeForComparison = (text: string): string => {
+    return normalizeDiacritics(text).toLowerCase();
+};
+
+export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): ConfidenceToken[] => {
+    if (tokens.length === 0) {
+        return [];
+    }
+
+    const groundTruthWords = groundTruth.trim().split(/\s+/);
+    if (groundTruthWords.length === 0) {
+        return tokens.map((t) => ({ ...t, confidence: 0.5 }));
+    }
+
+    // Step 1: Find all potential matches between tokens and ground truth words.
+    const tokenMatches: (null | number)[] = new Array(tokens.length).fill(null);
+    const groundTruthUsed: boolean[] = new Array(groundTruthWords.length).fill(false);
+
+    for (let i = 0; i < tokens.length; i++) {
+        const normalizedToken = normalizeForComparison(tokens[i].text);
+        for (let j = 0; j < groundTruthWords.length; j++) {
+            if (!groundTruthUsed[j] && normalizedToken === normalizeForComparison(groundTruthWords[j])) {
+                tokenMatches[i] = j;
+                groundTruthUsed[j] = true;
+                break;
+            }
+        }
+    }
+
+    // Step 2: Force the first and last tokens to match the ground truth.
+    if (tokenMatches[0] !== 0) {
+        if (tokenMatches[0] !== null) {
+            groundTruthUsed[tokenMatches[0]] = false;
+        }
+        tokenMatches[0] = 0;
+        groundTruthUsed[0] = true;
+    }
+    if (tokens.length > 1) {
+        const last = tokens.length - 1;
+        if (tokenMatches[last] !== groundTruthWords.length - 1) {
+            if (tokenMatches[last] !== null) {
+                groundTruthUsed[tokenMatches[last]] = false;
+            }
+            tokenMatches[last] = groundTruthWords.length - 1;
+            groundTruthUsed[groundTruthWords.length - 1] = true;
+        }
+    }
+
+    // Step 3: Decide which unmatched GT words replace unmatched tokens vs. which need insertion.
+    const result: ConfidenceToken[] = [];
+    const tokenReplacements: { [tokenIndex: number]: string } = {};
+    const gtWordsToInsert: { gtIndex: number; word: string }[] = [];
+
+    const unmatchedGTWords: { index: number; word: string }[] = [];
+    for (let i = 0; i < groundTruthWords.length; i++) {
+        if (!groundTruthUsed[i]) {
+            unmatchedGTWords.push({ index: i, word: groundTruthWords[i] });
+        }
+    }
+
+    for (const unmatchedGT of unmatchedGTWords) {
+        const gtIndex = unmatchedGT.index;
+        const gtWord = unmatchedGT.word;
+
+        let prevMatchedTokenIndex = -1;
+        let nextMatchedTokenIndex = tokens.length;
+
+        for (let i = 0; i < tokens.length; i++) {
+            if (tokenMatches[i] !== null) {
+                if (tokenMatches[i] < gtIndex) {
+                    prevMatchedTokenIndex = i;
+                }
+                if (tokenMatches[i] > gtIndex && i < nextMatchedTokenIndex) {
+                    nextMatchedTokenIndex = i;
+                }
+            }
+        }
+
+        let tokenToReplace = -1;
+        for (let j = prevMatchedTokenIndex + 1; j < nextMatchedTokenIndex; j++) {
+            if (tokenMatches[j] === null && !tokenReplacements[j]) {
+                tokenToReplace = j;
+                break;
+            }
+        }
+
+        if (tokenToReplace !== -1) {
+            tokenReplacements[tokenToReplace] = gtWord;
+        } else {
+            gtWordsToInsert.push({ gtIndex: gtIndex, word: gtWord });
+        }
+    }
+
+    // Step 4: Build the result from tokens, applying replacements and marking discards.
+    for (let i = 0; i < tokens.length; i++) {
+        if (tokenMatches[i] !== null) {
+            result.push({ ...tokens[i], text: groundTruthWords[tokenMatches[i]!] });
+        } else if (tokenReplacements[i]) {
+            result.push({ ...tokens[i], text: tokenReplacements[i] });
+        } else {
+            result.push({ ...tokens[i], confidence: 0.5 });
+        }
+    }
+
+    // Step 5: Insert the remaining ground truth words into the result.
+    for (const itemToInsert of gtWordsToInsert) {
+        const gtIndex = itemToInsert.gtIndex;
+        const gtWord = itemToInsert.word;
+
+        let insertAtIndex = result.length;
+        let prevResultToken: ConfidenceToken | null = null;
+        let nextResultToken: ConfidenceToken | null = null;
+
+        for (let i = 0; i < result.length; i++) {
+            const currentToken = result[i];
+            const originalTokenIndex = tokens.findIndex((t) => t.start === currentToken.start);
+            const currentGTMatch = originalTokenIndex !== -1 ? tokenMatches[originalTokenIndex] : -1;
+
+            if (currentGTMatch !== -1 && currentGTMatch > gtIndex && i < insertAtIndex) {
+                insertAtIndex = i;
+            }
+        }
+
+        prevResultToken = insertAtIndex > 0 ? result[insertAtIndex - 1] : null;
+        nextResultToken = insertAtIndex < result.length ? result[insertAtIndex] : null;
+
+        let timestamp = gtIndex;
+        if (prevResultToken && nextResultToken) {
+            timestamp = prevResultToken.start + (nextResultToken.start - prevResultToken.start) / 2;
+        } else if (prevResultToken) {
+            timestamp = prevResultToken.start + 1;
+        } else if (nextResultToken) {
+            timestamp = Math.max(0, nextResultToken.start - 1);
+        }
+
+        result.splice(insertAtIndex, 0, { start: timestamp, text: gtWord });
+    }
+
+    return result;
+};

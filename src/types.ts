@@ -48,7 +48,7 @@ export type Segment = Token & {
 
 /**
  * Represents a single token (word or phrase) with timing information.
- * This is the basic unit of transcribed or OCRed text.
+ * This is the basic unit of transcribed.
  */
 export type Token = {
     /**
