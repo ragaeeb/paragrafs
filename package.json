@@ -1,6 +1,6 @@
 {
     "name": "paragrafs",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "author": "Ragaeeb Haq",
     "main": "dist/index.js",
     "devDependencies": {
@@ -19,7 +19,7 @@
     },
     "description": "A lightweight TypeScript library designed to reconstruct paragraphs from AI transcriptions.",
     "engines": {
-        "bun": ">=1.2.13",
+        "bun": ">=1.2.15",
         "node": ">=22.0.0"
     },
     "files": [
@@ -34,7 +34,6 @@
         "audio",
         "video",
         "nodejs",
-        "ocr",
         "formatting",
         "paragraphs",
         "text-processing",
