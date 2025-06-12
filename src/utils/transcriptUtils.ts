@@ -114,42 +114,42 @@ const createInsertionToken = (
 };
 
 /**
- * Distributes the words from the ground truth into their matching indices in the tokens. If something cannot be matched, then we will keep the token with a isUnknown flag on it.
- * @param tokens The word-by-word tokens from the AI.
- * @param groundTruth The human-agent verified text for the transcription.
- * @returns The corrected tokens with a best-effort of the ground truth values applied.
+ * Identifies and returns a sorted list of reliable alignment points (anchors)
+ * between the token and ground truth sequences.
+ * @returns An array of [tokenIndex, gtIndex] pairs.
  */
-export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): GroundedToken[] => {
-    if (tokens.length === 0) {
-        return tokens;
-    }
-
-    const groundTruthWords = groundTruth.trim().match(/[\w\u0600-\u06FF]+[؟،.]?|\S+/g) || [];
-
-    // Step 1: Normalize inputs ONCE for performance.
+const findAnchors = (tokens: Token[], groundTruthWords: string[]): [number, number][] => {
     const normalizedTokens = tokens.map((t) => normalizeWord(t.text));
     const normalizedGTWords = groundTruthWords.map(normalizeWord);
 
-    // Step 2: Build LCS table and extract reliable "anchor" matches.
     const lcsTable = buildLcsTable(normalizedTokens, normalizedGTWords);
     const lcsMatches = extractLcsMatches(lcsTable, normalizedTokens, normalizedGTWords);
 
-    // Step 3: Enforce hard constraints for first and last tokens.
+    // Enforce hard constraints for first and last tokens.
     lcsMatches.set(0, 0);
-
-    if (tokens.length > 1) {
+    if (tokens.length > 1 && groundTruthWords.length > 1) {
         lcsMatches.set(tokens.length - 1, groundTruthWords.length - 1);
-    } else {
-        // Single-token segment: add a **synthetic trailing anchor** instead
-        lcsMatches.set(tokens.length, groundTruthWords.length);
     }
 
-    // Step 4: Create a sorted list of anchors, ensuring they are strictly increasing.
-    const anchors = Array.from(lcsMatches.entries())
+    // Sort and filter to ensure anchors are strictly increasing.
+    return Array.from(lcsMatches.entries())
         .sort((a, b) => a[0] - b[0])
         .filter((v, i, a) => !i || v[1] > a[i - 1][1]);
+};
 
-    // Step 5: Process the segments between anchors.
+/**
+ * Processes the segments (gaps) between a set of anchor points.
+ * @returns An object containing the aligned tokens and the last processed indices.
+ */
+const processGaps = (
+    tokens: Token[],
+    groundTruthWords: string[],
+    anchors: [number, number][],
+): {
+    lastGtIndex: number;
+    lastTokenIndex: number;
+    result: GroundedToken[];
+} => {
     const result: GroundedToken[] = [];
     let lastTokenIndex = -1;
     let lastGtIndex = -1;
@@ -161,10 +161,8 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string):
         let tokenGapIndex = 0;
         let gtGapIndex = 0;
 
-        // Resolve the gap by pairing tokens and GT words.
         while (tokenGapIndex < tokenGap.length || gtGapIndex < gtGap.length) {
             if (tokenGapIndex < tokenGap.length && gtGapIndex < gtGap.length) {
-                // Case 1: Substitution. A token exists for a GT word. Use token's timing.
                 result.push({
                     ...tokenGap[tokenGapIndex],
                     text: gtGap[gtGapIndex],
@@ -172,11 +170,9 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string):
                 tokenGapIndex++;
                 gtGapIndex++;
             } else if (tokenGapIndex < tokenGap.length) {
-                // Case 2: Discard. An extra AI token. Mark with low confidence.
                 result.push({ ...tokenGap[tokenGapIndex], isUnknown: true });
                 tokenGapIndex++;
             } else {
-                // Case 3: Insertion. An extra GT word. Create a new token.
                 const insertion = createInsertionToken(gtGap[gtGapIndex], {
                     gtGap,
                     gtGapIndex,
@@ -189,7 +185,6 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string):
             }
         }
 
-        // Add the anchor token itself.
         result.push({
             ...tokens[currentTokenIndex],
             text: groundTruthWords[currentGtIndex],
@@ -198,6 +193,66 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string):
         lastTokenIndex = currentTokenIndex;
         lastGtIndex = currentGtIndex;
     }
+
+    return { lastGtIndex, lastTokenIndex, result };
+};
+
+/**
+ * Processes any remaining tokens and ground truth words after the last anchor.
+ * This function mutates the `result` array by appending the final tokens.
+ */
+const processFinalTail = (
+    result: GroundedToken[],
+    tokens: Token[],
+    groundTruthWords: string[],
+    lastTokenIndex: number,
+    lastGtIndex: number,
+): void => {
+    const finalTokenGap = tokens.slice(lastTokenIndex + 1);
+    const finalGtGap = groundTruthWords.slice(lastGtIndex + 1);
+    let tokenIdx = 0;
+    let gtIdx = 0;
+
+    while (tokenIdx < finalTokenGap.length || gtIdx < finalGtGap.length) {
+        if (tokenIdx < finalTokenGap.length && gtIdx < finalGtGap.length) {
+            result.push({ ...finalTokenGap[tokenIdx], text: finalGtGap[gtIdx] });
+            tokenIdx++;
+            gtIdx++;
+        } else if (tokenIdx < finalTokenGap.length) {
+            result.push({ ...finalTokenGap[tokenIdx], isUnknown: true });
+            tokenIdx++;
+        } else {
+            // This case is logically impossible if the last words are anchored.
+            break;
+        }
+    }
+};
+
+/**
+ * Distributes the words from the ground truth into their matching indices in the tokens.
+ * If a token cannot be matched, it is marked with an `isUnknown` flag.
+ * This function orchestrates the alignment process through a series of helper functions.
+ *
+ * @param tokens The word-by-word tokens from the AI.
+ * @param groundTruth The human-agent verified text for the transcription.
+ * @returns The corrected tokens with a best-effort of the ground truth values applied.
+ */
+export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): GroundedToken[] => {
+    if (tokens.length === 0) return [];
+
+    const groundTruthWords = groundTruth.trim().match(/[\w\u0600-\u06FF]+[؟،.]?|\S+/g) || [];
+    if (groundTruthWords.length === 0) {
+        return tokens.map((token) => ({ ...token, isUnknown: true }));
+    }
+
+    // 1. Find reliable alignment points (anchors).
+    const anchors = findAnchors(tokens, groundTruthWords);
+
+    // 2. Process the segments between the anchors.
+    const { lastGtIndex, lastTokenIndex, result } = processGaps(tokens, groundTruthWords, anchors);
+
+    // 3. Process any remaining tokens after the last anchor.
+    processFinalTail(result, tokens, groundTruthWords, lastTokenIndex, lastGtIndex);
 
     return result;
 };
