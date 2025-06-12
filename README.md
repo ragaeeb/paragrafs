@@ -201,7 +201,7 @@ type Token = {
 };
 
 type Segment = Token & {
-    tokens?: Token[]; // Word-by-word breakdown with timings
+    tokens: Token[]; // Word-by-word breakdown with timings
 };
 
 type MarkedToken = 'SEGMENT_BREAK' | Token;

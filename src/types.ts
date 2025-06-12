@@ -1,9 +1,9 @@
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 
-export type GroundedSegment = Token & {
-    /**
-     * Word-by-word breakdown of the transcription with individual timings
-     */
+/**
+ * Represents a segment that was updated with the ground truth values.
+ */
+export type GroundedSegment = Omit<Segment, 'tokens'> & {
     tokens: GroundedToken[];
 };
 
