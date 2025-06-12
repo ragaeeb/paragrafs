@@ -136,7 +136,13 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string):
 
     // Step 3: Enforce hard constraints for first and last tokens.
     lcsMatches.set(0, 0);
-    lcsMatches.set(tokens.length - 1, groundTruthWords.length - 1); // Always anchor the last token to the last GT word
+
+    if (tokens.length > 1) {
+        lcsMatches.set(tokens.length - 1, groundTruthWords.length - 1);
+    } else {
+        // Single-token segment: add a **synthetic trailing anchor** instead
+        lcsMatches.set(tokens.length, groundTruthWords.length);
+    }
 
     // Step 4: Create a sorted list of anchors, ensuring they are strictly increasing.
     const anchors = Array.from(lcsMatches.entries())
