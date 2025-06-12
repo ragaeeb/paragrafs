@@ -1,4 +1,7 @@
-import type { Hints, Token } from '@/types';
+import type { Hints, MatchedToken, Token } from '@/types';
+
+import { buildLcsTable, extractLcsMatches } from './lcs';
+import { normalizeWord } from './textUtils';
 
 /**
  * Determines whether any hint phrase in `hints` matches the sequence of tokens
@@ -66,187 +69,126 @@ export const isHintMatched = (tokens: Token[], hints: Hints, index: number) => {
 };
 
 /**
- * Generates interpolated tokens with evenly spaced timestamps for missing words.
- *
- * The function assumes a gap between two tokens and fills it with estimated tokens
- * for the ground truth words that were not matched. The time range is divided evenly
- * among the words.
- *
- * @param startTime - Start time of the gap
- * @param endTime - End time of the gap
- * @param words - List of ground truth words to interpolate into this range
- * @returns Array of synthetic `Token` objects with estimated timings
+ * @typedef {object} CreateInsertionTokenProps
+ * @property {string[]} gtGap - The list of ground truth words in the current gap.
+ * @property {number} gtGapIndex - The index of the current word within the `gtGap`.
+ * @property {Token[]} tokenGap - The list of original tokens in the current gap.
+ * @property {Token | null} prevToken - The last processed token before the gap.
+ * @property {Token} nextToken - The next anchor token that defines the end of the gap.
  */
-export const interpolateMissingWords = (startTime: number, endTime: number, words: string[]): Token[] => {
-    const wordCount = words.length;
-    if (wordCount === 0 || endTime <= startTime) {
-        return [];
-    }
-
-    // place a single word in the middle of the interval
-    const interval = wordCount === 1 ? (endTime - startTime) / 2 : (endTime - startTime) / (wordCount + 1);
-    const positions = wordCount === 1 ? [interval] : Array.from({ length: wordCount }, (_, i) => interval * (i + 1));
-
-    return words.map((word, index) => {
-        const start = startTime + positions[index];
-        return {
-            end: start + interval,
-            start,
-            text: word,
-        };
-    });
-};
-
-type ConfidenceToken = Token & {
-    confidence?: number;
+type CreateInsertionTokenProps = {
+    gtGap: string[];
+    gtGapIndex: number;
+    nextToken: Token;
+    prevToken: null | Token;
+    tokenGap: Token[];
 };
 
 /**
- * Normalizes Arabic text by removing diacritics for comparison.
+ * Creates a new token for an inserted ground truth word.
+ * It estimates the start and end times by distributing the available time
+ * within the gap between the previous and next anchor tokens.
+ *
+ * @param {string} text - The text of the token to be inserted.
+ * @param {CreateInsertionTokenProps} props - The contextual information for the insertion.
+ * @returns {ConfidenceToken} A new token with estimated timing.
  */
-const normalizeDiacritics = (text: string): string => {
-    return text.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED]/g, '');
+const createInsertionToken = (
+    text: string,
+    { gtGap, gtGapIndex, nextToken, prevToken, tokenGap }: CreateInsertionTokenProps,
+): Token => {
+    const gapStartTime = prevToken?.end ?? 0;
+    const gapEndTime = nextToken.start;
+    const timeAvailable = Math.max(0, gapEndTime - gapStartTime);
+
+    // Distribute the available time amongst all words that need to be inserted in this gap.
+    const itemsToInsert = gtGap.length - tokenGap.length;
+    const timePerItem = itemsToInsert > 0 ? timeAvailable / itemsToInsert : 0;
+
+    // Calculate the position of *this specific word* within the set of insertions.
+    const insertionIndex = gtGapIndex - tokenGap.length;
+    const start = gapStartTime + insertionIndex * timePerItem;
+    const end = start + timePerItem;
+
+    return { end, start, text };
 };
 
 /**
- * Normalizes text for comparison (removes diacritics and converts to lowercase).
+ * Distributes the words from the ground truth into their matching indices in the tokens. If something cannot be matched, then we will keep the token with a isUnknown flag on it.
+ * @param tokens The word-by-word tokens from the AI.
+ * @param groundTruth The human-agent verified text for the transcription.
+ * @returns The corrected tokens with a best-effort of the ground truth values applied.
  */
-const normalizeForComparison = (text: string): string => {
-    return normalizeDiacritics(text).toLowerCase();
-};
+export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string) => {
+    const groundTruthWords = groundTruth.trim().match(/[\w\u0600-\u06FF]+[؟،.]?|\S+/g) || [];
 
-export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): ConfidenceToken[] => {
-    if (tokens.length === 0) {
-        return [];
-    }
+    // Step 1: Normalize inputs ONCE for performance.
+    const normalizedTokens = tokens.map((t) => normalizeWord(t.text));
+    const normalizedGTWords = groundTruthWords.map(normalizeWord);
 
-    const groundTruthWords = groundTruth.trim().split(/\s+/);
-    if (groundTruthWords.length === 0) {
-        return tokens.map((t) => ({ ...t, confidence: 0.5 }));
-    }
+    // Step 2: Build LCS table and extract reliable "anchor" matches.
+    const lcsTable = buildLcsTable(normalizedTokens, normalizedGTWords);
+    const lcsMatches = extractLcsMatches(lcsTable, normalizedTokens, normalizedGTWords);
 
-    // Step 1: Find all potential matches between tokens and ground truth words.
-    const tokenMatches: (null | number)[] = new Array(tokens.length).fill(null);
-    const groundTruthUsed: boolean[] = new Array(groundTruthWords.length).fill(false);
-
-    for (let i = 0; i < tokens.length; i++) {
-        const normalizedToken = normalizeForComparison(tokens[i].text);
-        for (let j = 0; j < groundTruthWords.length; j++) {
-            if (!groundTruthUsed[j] && normalizedToken === normalizeForComparison(groundTruthWords[j])) {
-                tokenMatches[i] = j;
-                groundTruthUsed[j] = true;
-                break;
-            }
-        }
-    }
-
-    // Step 2: Force the first and last tokens to match the ground truth.
-    if (tokenMatches[0] !== 0) {
-        if (tokenMatches[0] !== null) {
-            groundTruthUsed[tokenMatches[0]] = false;
-        }
-        tokenMatches[0] = 0;
-        groundTruthUsed[0] = true;
-    }
+    // Step 3: Enforce hard constraints for first and last tokens.
+    lcsMatches.set(0, 0);
     if (tokens.length > 1) {
-        const last = tokens.length - 1;
-        if (tokenMatches[last] !== groundTruthWords.length - 1) {
-            if (tokenMatches[last] !== null) {
-                groundTruthUsed[tokenMatches[last]] = false;
-            }
-            tokenMatches[last] = groundTruthWords.length - 1;
-            groundTruthUsed[groundTruthWords.length - 1] = true;
-        }
+        lcsMatches.set(tokens.length - 1, groundTruthWords.length - 1);
     }
 
-    // Step 3: Decide which unmatched GT words replace unmatched tokens vs. which need insertion.
-    const result: ConfidenceToken[] = [];
-    const tokenReplacements: { [tokenIndex: number]: string } = {};
-    const gtWordsToInsert: { gtIndex: number; word: string }[] = [];
+    // Step 4: Create a sorted list of anchors, ensuring they are strictly increasing.
+    const anchors = Array.from(lcsMatches.entries())
+        .sort((a, b) => a[0] - b[0])
+        .filter((v, i, a) => !i || v[1] > a[i - 1][1]);
 
-    const unmatchedGTWords: { index: number; word: string }[] = [];
-    for (let i = 0; i < groundTruthWords.length; i++) {
-        if (!groundTruthUsed[i]) {
-            unmatchedGTWords.push({ index: i, word: groundTruthWords[i] });
-        }
-    }
+    // Step 5: Process the segments between anchors.
+    const result: MatchedToken[] = [];
+    let lastTokenIndex = -1;
+    let lastGtIndex = -1;
 
-    for (const unmatchedGT of unmatchedGTWords) {
-        const gtIndex = unmatchedGT.index;
-        const gtWord = unmatchedGT.word;
+    for (const [currentTokenIndex, currentGtIndex] of anchors) {
+        const tokenGap = tokens.slice(lastTokenIndex + 1, currentTokenIndex);
+        const gtGap = groundTruthWords.slice(lastGtIndex + 1, currentGtIndex);
 
-        let prevMatchedTokenIndex = -1;
-        let nextMatchedTokenIndex = tokens.length;
+        let tokenGapIndex = 0;
+        let gtGapIndex = 0;
 
-        for (let i = 0; i < tokens.length; i++) {
-            if (tokenMatches[i] !== null) {
-                if (tokenMatches[i] < gtIndex) {
-                    prevMatchedTokenIndex = i;
-                }
-                if (tokenMatches[i] > gtIndex && i < nextMatchedTokenIndex) {
-                    nextMatchedTokenIndex = i;
-                }
-            }
-        }
-
-        let tokenToReplace = -1;
-        for (let j = prevMatchedTokenIndex + 1; j < nextMatchedTokenIndex; j++) {
-            if (tokenMatches[j] === null && !tokenReplacements[j]) {
-                tokenToReplace = j;
-                break;
-            }
-        }
-
-        if (tokenToReplace !== -1) {
-            tokenReplacements[tokenToReplace] = gtWord;
-        } else {
-            gtWordsToInsert.push({ gtIndex: gtIndex, word: gtWord });
-        }
-    }
-
-    // Step 4: Build the result from tokens, applying replacements and marking discards.
-    for (let i = 0; i < tokens.length; i++) {
-        if (tokenMatches[i] !== null) {
-            result.push({ ...tokens[i], text: groundTruthWords[tokenMatches[i]!] });
-        } else if (tokenReplacements[i]) {
-            result.push({ ...tokens[i], text: tokenReplacements[i] });
-        } else {
-            result.push({ ...tokens[i], confidence: 0.5 });
-        }
-    }
-
-    // Step 5: Insert the remaining ground truth words into the result.
-    for (const itemToInsert of gtWordsToInsert) {
-        const gtIndex = itemToInsert.gtIndex;
-        const gtWord = itemToInsert.word;
-
-        let insertAtIndex = result.length;
-        let prevResultToken: ConfidenceToken | null = null;
-        let nextResultToken: ConfidenceToken | null = null;
-
-        for (let i = 0; i < result.length; i++) {
-            const currentToken = result[i];
-            const originalTokenIndex = tokens.findIndex((t) => t.start === currentToken.start);
-            const currentGTMatch = originalTokenIndex !== -1 ? tokenMatches[originalTokenIndex] : -1;
-
-            if (currentGTMatch !== -1 && currentGTMatch > gtIndex && i < insertAtIndex) {
-                insertAtIndex = i;
+        // Resolve the gap by pairing tokens and GT words.
+        while (tokenGapIndex < tokenGap.length || gtGapIndex < gtGap.length) {
+            if (tokenGapIndex < tokenGap.length && gtGapIndex < gtGap.length) {
+                // Case 1: Substitution. A token exists for a GT word. Use token's timing.
+                result.push({
+                    ...tokenGap[tokenGapIndex],
+                    text: gtGap[gtGapIndex],
+                });
+                tokenGapIndex++;
+                gtGapIndex++;
+            } else if (tokenGapIndex < tokenGap.length) {
+                // Case 2: Discard. An extra AI token. Mark with low confidence.
+                result.push({ ...tokenGap[tokenGapIndex], isUnknown: true });
+                tokenGapIndex++;
+            } else {
+                // Case 3: Insertion. An extra GT word. Create a new token.
+                const insertion = createInsertionToken(gtGap[gtGapIndex], {
+                    gtGap,
+                    gtGapIndex,
+                    nextToken: tokens[currentTokenIndex],
+                    prevToken: lastTokenIndex === -1 ? null : tokens[lastTokenIndex],
+                    tokenGap,
+                });
+                result.push(insertion);
+                gtGapIndex++;
             }
         }
 
-        prevResultToken = insertAtIndex > 0 ? result[insertAtIndex - 1] : null;
-        nextResultToken = insertAtIndex < result.length ? result[insertAtIndex] : null;
+        // Add the anchor token itself.
+        result.push({
+            ...tokens[currentTokenIndex],
+            text: groundTruthWords[currentGtIndex],
+        });
 
-        let timestamp = gtIndex;
-        if (prevResultToken && nextResultToken) {
-            timestamp = prevResultToken.start + (nextResultToken.start - prevResultToken.start) / 2;
-        } else if (prevResultToken) {
-            timestamp = prevResultToken.start + 1;
-        } else if (nextResultToken) {
-            timestamp = Math.max(0, nextResultToken.start - 1);
-        }
-
-        result.splice(insertAtIndex, 0, { start: timestamp, text: gtWord });
+        lastTokenIndex = currentTokenIndex;
+        lastGtIndex = currentGtIndex;
     }
 
     return result;

@@ -6,10 +6,10 @@ describe('transcriptUtils', () => {
     describe('syncTokensWithGroundTruth', () => {
         it('should be a no-op if everything matches perfectly', () => {
             const tokens = [
-                { start: 0, text: 'The' },
-                { start: 1, text: 'quick' },
-                { start: 2, text: 'brown' },
-                { start: 3, text: 'fox' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, start: 1, text: 'quick' },
+                { end: 2, start: 2, text: 'brown' },
+                { end: 4, start: 3, text: 'fox' },
             ];
             const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox');
             expect(actual).toEqual(tokens);
@@ -17,122 +17,122 @@ describe('transcriptUtils', () => {
 
         it('should fill in the missing words by estimating where they belong when ground truth is longer than tokens while replacing punctuation', () => {
             const tokens = [
-                { start: 0, text: 'The' },
-                { start: 2, text: 'brown' },
-                { start: 3, text: 'fox' },
-                { start: 5, text: 'right' },
-                { start: 6, text: 'over' },
-                { start: 7, text: 'a' },
-                { start: 8, text: 'last' },
-                { start: 9, text: 'dog' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 3, start: 2, text: 'brown' },
+                { end: 3.5, start: 3, text: 'fox' },
+                { end: 6, start: 5, text: 'right' },
+                { end: 6.9, start: 6, text: 'over' },
+                { end: 8, start: 7, text: 'a' },
+                { end: 9, start: 8, text: 'last' },
+                { end: 10, start: 9, text: 'dog' },
             ];
             const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
             expect(actual).toEqual([
-                { start: 0, text: 'The' },
-                { start: 1, text: 'quick' },
-                { start: 2, text: 'brown' },
-                { start: 3, text: 'fox' },
-                { start: 4, text: 'jumps' },
-                { start: 5, text: 'right' },
-                { start: 6, text: 'over' },
-                { start: 7, text: 'the' }, // since there are exactly two words between over and dog, and there were 2 words unmatched [a,last] from the ground truth (the,lazy) we can substitute them
-                { start: 8, text: 'lazy' },
-                { start: 9, text: 'dog.' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, start: 1, text: 'quick' },
+                { end: 3, start: 2, text: 'brown' },
+                { end: 3.5, start: 3, text: 'fox' },
+                { end: 5, start: 3.5, text: 'jumps' },
+                { end: 6, start: 5, text: 'right' },
+                { end: 6.9, start: 6, text: 'over' },
+                { end: 8, start: 7, text: 'the' }, // since there are exactly two words between over and dog, and there were 2 words unmatched [a,last] from the ground truth (the,lazy) we can substitute them
+                { end: 9, start: 8, text: 'lazy' },
+                { end: 10, start: 9, text: 'dog.' },
             ]);
         });
 
         it('should match as many words possible and then start estimating where unmatched words would go based on gaps found when ground truth is shorter than tokens', () => {
             const tokens = [
-                { start: 0, text: 'The' },
-                { start: 1, text: 'uh' },
-                { start: 2, text: 'quick' },
-                { start: 3, text: 'blue' },
-                { start: 4, text: 'umm' },
-                { start: 5, text: 'fox' },
-                { start: 6, text: 'jumps' },
-                { start: 7, text: 'jumps' },
-                { start: 8, text: 'right' },
-                { start: 9, text: 'over' },
-                { start: 10, text: 'the' },
-                { start: 11, text: 'the' },
-                { start: 12, text: 'the' },
-                { start: 13, text: 'lazy' },
-                { start: 14, text: 'dog' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, start: 1, text: 'uh' },
+                { end: 3, start: 2, text: 'quick' },
+                { end: 4, start: 3, text: 'blue' },
+                { end: 5, start: 4, text: 'umm' },
+                { end: 6, start: 5, text: 'fox' },
+                { end: 7, start: 6, text: 'jumps' },
+                { end: 8, start: 7, text: 'jumps' },
+                { end: 9, start: 8, text: 'right' },
+                { end: 10, start: 9, text: 'over' },
+                { end: 11, start: 10, text: 'the' },
+                { end: 12, start: 11, text: 'the' },
+                { end: 13, start: 12, text: 'the' },
+                { end: 14, start: 13, text: 'lazy' },
+                { end: 15, start: 14, text: 'dog' },
             ];
             const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog');
             expect(actual).toEqual([
-                { start: 0, text: 'The' },
-                { confidence: 0.5, start: 1, text: 'uh' }, // since this token was not matched we keep it always with a fixed confidence of 0.5
-                { start: 2, text: 'quick' },
-                { start: 3, text: 'brown' }, // should replace the first token after quick with unmatched "brown" since there is a gap between brown and fox
-                { confidence: 0.5, start: 4, text: 'umm' },
-                { start: 5, text: 'fox' },
-                { start: 6, text: 'jumps' },
-                { confidence: 0.5, start: 7, text: 'jumps' },
-                { start: 8, text: 'right' },
-                { start: 9, text: 'over' },
-                { start: 10, text: 'the' },
-                { confidence: 0.5, start: 11, text: 'the' },
-                { confidence: 0.5, start: 12, text: 'the' },
-                { start: 13, text: 'lazy' },
-                { start: 14, text: 'dog' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, isUnknown: true, start: 1, text: 'uh' }, // since this token was not matched we keep it always with a fixed confidence of 0.5
+                { end: 3, start: 2, text: 'quick' },
+                { end: 4, start: 3, text: 'brown' }, // should replace the first token after quick with unmatched "brown" since there is a gap between brown and fox
+                { end: 5, isUnknown: true, start: 4, text: 'umm' },
+                { end: 6, start: 5, text: 'fox' },
+                { end: 7, isUnknown: true, start: 6, text: 'jumps' },
+                { end: 8, start: 7, text: 'jumps' },
+                { end: 9, start: 8, text: 'right' },
+                { end: 10, start: 9, text: 'over' },
+                { end: 11, isUnknown: true, start: 10, text: 'the' },
+                { end: 12, isUnknown: true, start: 11, text: 'the' },
+                { end: 13, start: 12, text: 'the' },
+                { end: 14, start: 13, text: 'lazy' },
+                { end: 15, start: 14, text: 'dog' },
             ]);
         });
 
         it('should replace all the wrong words in the array when the ground truth and tokens have equal length', () => {
             const tokens = [
-                { start: 0, text: 'The' },
-                { start: 1, text: 'quick' },
-                { start: 2, text: 'blue' },
-                { start: 3, text: 'flocks' },
-                { start: 4, text: 'jump' },
-                { start: 5, text: 'rights' },
-                { start: 6, text: 'over' },
-                { start: 7, text: 'a' },
-                { start: 8, text: 'lays' },
-                { start: 9, text: 'dock' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, start: 1, text: 'quick' },
+                { end: 3, start: 2, text: 'blue' },
+                { end: 4, start: 3, text: 'flocks' },
+                { end: 5, start: 4, text: 'jump' },
+                { end: 6, start: 5, text: 'rights' },
+                { end: 7, start: 6, text: 'over' },
+                { end: 8, start: 7, text: 'a' },
+                { end: 9, start: 8, text: 'lays' },
+                { end: 10, start: 9, text: 'dock' },
             ];
             const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
             expect(actual).toEqual([
-                { start: 0, text: 'The' },
-                { start: 1, text: 'quick' },
-                { start: 2, text: 'brown' },
-                { start: 3, text: 'fox' },
-                { start: 4, text: 'jumps' },
-                { start: 5, text: 'right' },
-                { start: 6, text: 'over' },
-                { start: 7, text: 'the' },
-                { start: 8, text: 'lazy' },
-                { start: 9, text: 'dog.' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, start: 1, text: 'quick' },
+                { end: 3, start: 2, text: 'brown' },
+                { end: 4, start: 3, text: 'fox' },
+                { end: 5, start: 4, text: 'jumps' },
+                { end: 6, start: 5, text: 'right' },
+                { end: 7, start: 6, text: 'over' },
+                { end: 8, start: 7, text: 'the' },
+                { end: 9, start: 8, text: 'lazy' },
+                { end: 10, start: 9, text: 'dog.' },
             ]);
         });
 
         it('should handle where ground truth is larger than tokens while needing a replacement', () => {
             const tokens = [
-                { start: 0, text: 'the' },
-                { start: 1, text: 'quick' },
-                { start: 2, text: 'brown' },
-                { start: 3, text: 'fox' },
-                { start: 5, text: 'right' },
-                { start: 6, text: 'over' },
-                { start: 7, text: 'a' },
-                { start: 8, text: 'a' },
-                { start: 9, text: 'crazy' },
-                { start: 10, text: 'dog' },
+                { end: 1, start: 0, text: 'the' },
+                { end: 2, start: 1, text: 'quick' },
+                { end: 3, start: 2, text: 'brown' },
+                { end: 4, start: 3, text: 'fox' },
+                { end: 6, start: 5, text: 'right' },
+                { end: 7, start: 6, text: 'over' },
+                { end: 8, start: 7, text: 'a' },
+                { end: 9, start: 8, text: 'a' },
+                { end: 10, start: 9, text: 'crazy' },
+                { end: 11, start: 10, text: 'dog' },
             ];
             const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
             expect(actual).toEqual([
-                { start: 0, text: 'The' },
-                { start: 1, text: 'quick' },
-                { start: 2, text: 'brown' },
-                { start: 3, text: 'fox' },
-                { start: 4, text: 'jumps' },
-                { start: 5, text: 'right' },
-                { start: 6, text: 'over' },
-                { start: 7, text: 'the' }, // this and the token below were replaced since they were the next ones after the last match
-                { start: 8, text: 'lazy' },
-                { confidence: 0.5, start: 9, text: 'crazy' }, // unmatched
-                { start: 10, text: 'dog.' },
+                { end: 1, start: 0, text: 'The' },
+                { end: 2, start: 1, text: 'quick' },
+                { end: 3, start: 2, text: 'brown' },
+                { end: 4, start: 3, text: 'fox' },
+                { end: 5, start: 4, text: 'jumps' },
+                { end: 6, start: 5, text: 'right' },
+                { end: 7, start: 6, text: 'over' },
+                { end: 8, start: 7, text: 'the' }, // this and the token below were replaced since they were the next ones after the last match
+                { end: 9, start: 8, text: 'lazy' },
+                { end: 10, isUnknown: true, start: 9, text: 'crazy' }, // unmatched
+                { end: 11, start: 10, text: 'dog.' },
             ]);
         });
 
@@ -161,8 +161,8 @@ describe('transcriptUtils', () => {
                 { start: 4, text: 'أَبِي' },
                 { start: 5, text: 'ذِئْبٍ' },
                 { start: 6, text: 'عَنِ' },
-                { confidence: 0.5, start: 6.5, text: 'معمر' },
-                { confidence: 0.5, start: 6.7, text: 'اخبرنا' },
+                { isUnknown: true, start: 6.5, text: 'معمر' },
+                { isUnknown: true, start: 6.7, text: 'اخبرنا' },
                 { start: 7, text: 'الْمَقْبُرِيِّ' },
             ]);
         });
@@ -476,8 +476,7 @@ describe('transcriptUtils', () => {
 
             const actual = syncTokensWithGroundTruth(tokens, groundTruth);
 
-            // actual received
-            const actualReceived = [
+            expect(actual).toEqual([
                 {
                     end: 1,
                     start: 0,
@@ -500,43 +499,45 @@ describe('transcriptUtils', () => {
                 },
                 {
                     end: 5,
+                    isUnknown: true,
                     start: 4,
                     text: 'ما',
                 },
                 {
                     end: 6,
+                    isUnknown: true,
                     start: 5,
                     text: 'السبيل',
                 },
                 {
                     end: 7,
+                    isUnknown: true,
                     start: 6,
                     text: 'الى',
                 },
                 {
                     end: 8,
+                    isUnknown: true,
                     start: 7,
                     text: 'تدبر',
                 },
                 {
                     end: 9,
+                    isUnknown: true,
                     start: 8,
-                    text: 'القران؟',
+                    text: 'القرآن',
                 },
                 {
-                    confidence: 0.5,
                     end: 10,
                     start: 9,
                     text: 'ما',
                 },
                 {
-                    confidence: 0.5,
                     end: 11,
                     start: 10,
                     text: 'السبيل',
                 },
                 {
-                    confidence: 0.5,
                     end: 12,
                     start: 11,
                     text: 'الى',
@@ -549,19 +550,17 @@ describe('transcriptUtils', () => {
                 {
                     end: 14,
                     start: 13,
-                    text: 'القران',
+                    text: 'القران؟',
                 },
                 {
-                    confidence: 0.5,
                     end: 15,
                     start: 14,
                     text: 'تدبر',
                 },
                 {
-                    confidence: 0.5,
                     end: 16,
                     start: 15,
-                    text: 'القرآن',
+                    text: 'القران',
                 },
                 {
                     end: 17,
@@ -639,29 +638,9 @@ describe('transcriptUtils', () => {
                     text: 'ليدبروا',
                 },
                 {
-                    start: 30.5,
-                    text: 'اياته،',
-                },
-                {
-                    start: 30.75,
-                    text: 'القران',
-                },
-                {
-                    start: 30.875,
-                    text: 'يدبروا',
-                },
-                {
-                    start: 30.9375,
-                    text: 'فالقران',
-                },
-                {
-                    start: 30.96875,
-                    text: 'لتدبر',
-                },
-                {
                     end: 32,
                     start: 31,
-                    text: 'اياته',
+                    text: 'اياته،',
                 },
                 {
                     end: 34,
@@ -679,10 +658,9 @@ describe('transcriptUtils', () => {
                     text: 'يتدبرون',
                 },
                 {
-                    confidence: 0.5,
                     end: 37,
                     start: 36,
-                    text: 'القرآن',
+                    text: 'القران',
                 },
                 {
                     end: 38,
@@ -695,10 +673,9 @@ describe('transcriptUtils', () => {
                     text: 'افلم',
                 },
                 {
-                    confidence: 0.5,
                     end: 40,
                     start: 39,
-                    text: 'يتدبروا',
+                    text: 'يدبروا',
                 },
                 {
                     end: 41,
@@ -706,10 +683,9 @@ describe('transcriptUtils', () => {
                     text: 'القول',
                 },
                 {
-                    confidence: 0.5,
                     end: 42,
                     start: 41,
-                    text: 'فالقرآن',
+                    text: 'فالقران',
                 },
                 {
                     end: 43,
@@ -717,13 +693,11 @@ describe('transcriptUtils', () => {
                     text: 'انزل',
                 },
                 {
-                    confidence: 0.5,
                     end: 44,
                     start: 43,
-                    text: 'لتتدبر',
+                    text: 'لتدبر',
                 },
                 {
-                    confidence: 0.5,
                     end: 45,
                     start: 44,
                     text: 'اياته',
@@ -799,8 +773,8 @@ describe('transcriptUtils', () => {
                     text: 'للتي',
                 },
                 {
-                    confidence: 0.5,
                     end: 60,
+                    isUnknown: true,
                     start: 59,
                     text: 'هي',
                 },
@@ -809,7 +783,7 @@ describe('transcriptUtils', () => {
                     start: 60,
                     text: 'اقوم.',
                 },
-            ];
+            ]);
         });
     });
 });

@@ -1,4 +1,4 @@
-import type { Hints } from './types';
+import type { Hints } from '../types';
 
 /**
  * Checks if a text string ends with a punctuation mark (period, question mark, exclamation mark).
@@ -42,13 +42,14 @@ export const formatSecondsToTimestamp = (seconds: number): string => {
 export const normalizeWord = (w: string) => {
     return (
         w
-            // decompose to strip diacritics
+            // Decompose to strip diacritics
             .normalize('NFD')
-            // remove Arabic diacritic marks
+            // Remove Arabic diacritic marks and other common combining marks
+            .replace(/[\u0300-\u036f]/g, '')
             .replace(/[\u064B-\u065F]/g, '')
-            // strip any punctuation or symbol at start/end (Unicode property escapes)
+            // Strip any punctuation or symbol at start/end (Unicode property escapes)
             .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '')
-            // recompose
+            // Recompose
             .normalize('NFC')
     );
 };

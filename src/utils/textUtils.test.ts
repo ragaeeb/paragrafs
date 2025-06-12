@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { formatSecondsToTimestamp, isEndingWithPunctuation } from './textUtils';
+import { formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord } from './textUtils';
 
 describe('textUtils', () => {
     describe('formatSecondsToTimestamp', () => {
@@ -68,6 +68,35 @@ describe('textUtils', () => {
 
         it('should be false if we do not end with a puncutation', () => {
             expect(isEndingWithPunctuation('Yes? And no')).toBeFalse();
+        });
+    });
+
+    describe('normalizeWord', () => {
+        it('should remove standard Arabic diacritics', () => {
+            expect(normalizeWord('كِتَابٌ')).toBe('كتاب');
+        });
+
+        it('should remove general Unicode combining marks', () => {
+            expect(normalizeWord('e\u0301')).toBe('e'); // é
+        });
+
+        it('should strip leading and trailing punctuation', () => {
+            expect(normalizeWord('.hello!')).toBe('hello');
+            expect(normalizeWord('world?')).toBe('world');
+            expect(normalizeWord(',test,')).toBe('test');
+        });
+
+        it('should NOT remove internal punctuation like hyphens', () => {
+            expect(normalizeWord('well-being')).toBe('well-being');
+        });
+
+        it('should handle a combination of operations', () => {
+            expect(normalizeWord('!مَرْحَبًا,')).toBe('مرحبا');
+        });
+
+        it('should handle empty strings', () => {
+            expect(normalizeWord('')).toBe('');
+            expect(normalizeWord('.,!')).toBe('');
         });
     });
 });
