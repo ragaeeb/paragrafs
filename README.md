@@ -134,18 +134,18 @@ console.log(transcript);
 ### Aligning AI Tokens to Human-Edited Text
 
 ```typescript
-import { mapTokensToGroundTruth } from 'paragrafs';
+import { updateSegmentWithGroundTruth } from 'paragrafs';
 
 const rawSegment = {
     start: 0,
     end: 10,
-    text: 'The quick brown fox jumps right over the lazy dog.',
+    text: 'The Buick crown flock jumps right over the crazy dog.',
     tokens: [
         /* AI-generated word timestamps */
     ],
 };
 
-const aligned = mapTokensToGroundTruth(rawSegment);
+const aligned = updateSegmentWithGroundTruth(rawSegment, 'The quick brown fox jumps right over the lazy dog.');
 console.log(aligned.tokens);
 // Each token now matches the ground-truth words exactly,
 // with missing words interpolated where needed.

@@ -1,7 +1,18 @@
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 
-export type GroundedSegment = Segment & {
-    tokens: MatchedToken[];
+export type GroundedSegment = Token & {
+    /**
+     * Word-by-word breakdown of the transcription with individual timings
+     */
+    tokens: GroundedToken[];
+};
+
+/**
+ * Represents a token that was matched or unmatched during sync with the ground truth value.
+ */
+export type GroundedToken = Token & {
+    /** If this is true it means this token was not matched during the ground truth syncing */
+    isUnknown?: boolean;
 };
 
 export type Hints = Record<string, string[][]>;
@@ -37,14 +48,6 @@ export type MarkTokensWithDividersOptions = {
     fillers?: string[];
     gapThreshold: number;
     hints?: Hints;
-};
-
-/**
- * Represents a token that was matched or unmatched during sync with the ground truth value.
- */
-export type MatchedToken = Token & {
-    /** If this is true it means this token was not matched during the ground truth syncing */
-    isUnknown?: boolean;
 };
 
 /**

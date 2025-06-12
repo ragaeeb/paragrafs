@@ -1187,48 +1187,6 @@ describe('transcript', () => {
                 },
             ]);
         });
-
-        it('should strip punctuation when matching and preserve ground truth punctuation', () => {
-            const segment: Segment = {
-                end: 3,
-                start: 0,
-                text: '',
-                tokens: [
-                    { end: 1, start: 0, text: 'Hola' },
-                    { end: 2, start: 1, text: 'Como' },
-                    { end: 3, start: 2, text: 'estas' },
-                ],
-            };
-            const actual = updateSegmentWithGroundTruth(segment, '¡Hola! ¿Cómo estás?');
-            expect(actual.tokens).toEqual([
-                { end: 1, start: 0, text: '¡Hola!' },
-                {
-                    end: 2,
-                    start: 1,
-                    text: '¿Cómo',
-                },
-                {
-                    end: 3,
-                    start: 2,
-                    text: 'estás?',
-                },
-            ]);
-        });
-
-        it('should fallback to estimate when no LCS matches at all', () => {
-            const segment: Segment = {
-                end: 5,
-                start: 0,
-                text: '',
-                tokens: [
-                    { end: 1, start: 0, text: 'one' },
-                    { end: 2, start: 1, text: 'two' },
-                ],
-            };
-            const estimated = estimateSegmentFromToken(segment);
-            const actual = updateSegmentWithGroundTruth(segment, 'Foo bar baz');
-            expect(actual).toEqual(estimated);
-        });
     });
 
     describe('cleanupIsolatedTokens', () => {

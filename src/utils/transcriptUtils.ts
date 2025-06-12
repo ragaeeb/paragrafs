@@ -1,4 +1,4 @@
-import type { Hints, MatchedToken, Token } from '@/types';
+import type { GroundedToken, Hints, Token } from '@/types';
 
 import { buildLcsTable, extractLcsMatches } from './lcs';
 import { normalizeWord } from './textUtils';
@@ -142,7 +142,7 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string) 
         .filter((v, i, a) => !i || v[1] > a[i - 1][1]);
 
     // Step 5: Process the segments between anchors.
-    const result: MatchedToken[] = [];
+    const result: GroundedToken[] = [];
     let lastTokenIndex = -1;
     let lastGtIndex = -1;
 

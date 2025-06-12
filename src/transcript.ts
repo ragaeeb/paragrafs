@@ -355,12 +355,12 @@ export const cleanupIsolatedTokens = (markedTokens: MarkedToken[]): MarkedToken[
  *
  * Uses Longest Common Subsequence (LCS) to identify anchor matches between
  * tokenized output and ground truth. Where no matches exist, it interpolates
- * timestamped tokens for unmatched words. Falls back to `estimateSegmentFromToken`
- * if no meaningful overlap is found.
+ * timestamped tokens for unmatched words.
  *
  * @param segment - A `Segment` object with ground truth `text` and AI-generated `tokens`
  * @param groundTruth - The ground truth text to apply to the segment's text and its tokens.
- * @returns A new `Segment` with the `tokens` adjusted to match the ground truth `text`
+ * @returns A new `GroundedSegment` with the `tokens` adjusted to match the ground truth `text`
+ * along with any unmatched tokens flagged.
  */
 export const updateSegmentWithGroundTruth = (segment: Segment, groundTruth: string): GroundedSegment => {
     return {
@@ -369,6 +369,17 @@ export const updateSegmentWithGroundTruth = (segment: Segment, groundTruth: stri
         text: groundTruth,
         tokens: syncTokensWithGroundTruth(segment.tokens, groundTruth),
     };
+};
+
+/**
+ * Produces a segment with the ground truth replacing the text and its respective tokens.
+ * @param segment The segment to replace the ground truth with.
+ * @param groundTruth The human verified transcription of the segment.
+ * @returns A segment with the ground truth applies to the segment text and its tokens.
+ */
+export const applyGroundTruthToSegment = (segment: Segment, groundTruth: string): Segment => {
+    const result = updateSegmentWithGroundTruth(segment, groundTruth);
+    return { ...result, tokens: result.tokens.filter((t) => !t.isUnknown) };
 };
 
 /**
