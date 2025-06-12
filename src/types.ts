@@ -63,7 +63,7 @@ export type Segment = Token & {
 
 /**
  * Represents a single token (word or phrase) with timing information.
- * This is the basic unit of transcribed.
+ * This is the basic unit of transcribed text.
  */
 export type Token = {
     /**

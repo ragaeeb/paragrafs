@@ -91,7 +91,7 @@ type CreateInsertionTokenProps = {
  *
  * @param {string} text - The text of the token to be inserted.
  * @param {CreateInsertionTokenProps} props - The contextual information for the insertion.
- * @returns {ConfidenceToken} A new token with estimated timing.
+ * @returns {Token} A new token with estimated timing.
  */
 const createInsertionToken = (
     text: string,
@@ -119,7 +119,11 @@ const createInsertionToken = (
  * @param groundTruth The human-agent verified text for the transcription.
  * @returns The corrected tokens with a best-effort of the ground truth values applied.
  */
-export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string) => {
+export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): GroundedToken[] => {
+    if (tokens.length === 0) {
+        return tokens;
+    }
+
     const groundTruthWords = groundTruth.trim().match(/[\w\u0600-\u06FF]+[؟،.]?|\S+/g) || [];
 
     // Step 1: Normalize inputs ONCE for performance.

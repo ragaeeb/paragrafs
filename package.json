@@ -7,8 +7,6 @@
         "@eslint/js": "^9.28.0",
         "@types/bun": "^1.2.15",
         "@types/node": "^24.0.1",
-        "@typescript-eslint/eslint-plugin": "^8.34.0",
-        "@typescript-eslint/parser": "^8.34.0",
         "eslint": "^9.28.0",
         "eslint-config-prettier": "^10.1.5",
         "eslint-plugin-perfectionist": "^4.14.0",
@@ -16,7 +14,8 @@
         "globals": "^16.2.0",
         "prettier": "^3.5.3",
         "semantic-release": "^24.2.5",
-        "tsup": "^8.5.0"
+        "tsup": "^8.5.0",
+        "typescript-eslint": "^8.34.0"
     },
     "description": "A lightweight TypeScript library designed to reconstruct paragraphs from AI transcriptions.",
     "engines": {

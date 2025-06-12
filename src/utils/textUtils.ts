@@ -45,7 +45,7 @@ export const normalizeWord = (w: string) => {
             // Decompose to strip diacritics
             .normalize('NFD')
             // Remove Arabic diacritic marks and other common combining marks
-            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\p{Mn}/gu, '')
             .replace(/[\u064B-\u065F]/g, '')
             // Strip any punctuation or symbol at start/end (Unicode property escapes)
             .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '')

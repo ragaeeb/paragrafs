@@ -6,7 +6,7 @@ describe('lcs', () => {
     const original = ['a', 'b', 'c', 'd', 'e', 'f'];
     const ground = ['a', 'x', 'c', 'y', 'e', 'z', 'f'];
 
-    const lcsTable: number[][] = buildLcsTable(['a', 'b', 'c', 'd', 'e', 'f'], ['a', 'x', 'c', 'y', 'e', 'z', 'f']);
+    const lcsTable: number[][] = buildLcsTable(original, ground);
 
     describe('buildLcsTable', () => {
         it('buildLcsTable should correctly calculate the length of the LCS', () => {
