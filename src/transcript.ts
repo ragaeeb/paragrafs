@@ -1,9 +1,15 @@
-import type { MarkedSegment, MarkedToken, MarkTokensWithDividersOptions, Segment, Token } from './types';
+import type {
+    GroundedSegment,
+    MarkedSegment,
+    MarkedToken,
+    MarkTokensWithDividersOptions,
+    Segment,
+    Token,
+} from './types';
 
-import { createHints, formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord } from './textUtils';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
-import { buildLcsTable, extractLcsMatches } from './utils/lcs';
-import { interpolateMissingWords, isHintMatched } from './utils/transcriptUtils';
+import { createHints, formatSecondsToTimestamp, isEndingWithPunctuation } from './utils/textUtils';
+import { isHintMatched, syncTokensWithGroundTruth } from './utils/transcriptUtils';
 
 /**
  * Estimates a segment with word-level tokens from a single token with multi-word text.
@@ -349,84 +355,31 @@ export const cleanupIsolatedTokens = (markedTokens: MarkedToken[]): MarkedToken[
  *
  * Uses Longest Common Subsequence (LCS) to identify anchor matches between
  * tokenized output and ground truth. Where no matches exist, it interpolates
- * timestamped tokens for unmatched words. Falls back to `estimateSegmentFromToken`
- * if no meaningful overlap is found.
+ * timestamped tokens for unmatched words.
  *
  * @param segment - A `Segment` object with ground truth `text` and AI-generated `tokens`
- * @returns A new `Segment` with the `tokens` adjusted to match the ground truth `text`
+ * @param groundTruth - The ground truth text to apply to the segment's text and its tokens.
+ * @returns A new `GroundedSegment` with the `tokens` adjusted to match the ground truth `text`
+ * along with any unmatched tokens flagged.
  */
-export const mapTokensToGroundTruth = (segment: Segment): Segment => {
-    const { end: segmentEnd, start: segmentStart, text, tokens } = segment;
+export const updateSegmentWithGroundTruth = (segment: Segment, groundTruth: string): GroundedSegment => {
+    return {
+        end: segment.end,
+        start: segment.start,
+        text: groundTruth,
+        tokens: syncTokensWithGroundTruth(segment.tokens, groundTruth),
+    };
+};
 
-    const groundTruthWords = text.trim().split(/\s+/).filter(Boolean);
-    if (groundTruthWords.length === 0) {
-        return { ...segment, tokens: [] };
-    }
-
-    if (!tokens || tokens.length === 0) {
-        return estimateSegmentFromToken({ end: segmentEnd, start: segmentStart, text });
-    }
-
-    const normalizedTokens = tokens.map((t) => normalizeWord(t.text));
-    const normalizedGround = groundTruthWords.map(normalizeWord);
-
-    const lcsTable = buildLcsTable(normalizedTokens, normalizedGround);
-    const alignedAnchors = extractLcsMatches(lcsTable, normalizedTokens, normalizedGround);
-
-    if (alignedAnchors.length === 0) {
-        return estimateSegmentFromToken({ end: segmentEnd, start: segmentStart, text });
-    }
-
-    const alignedTokens: Token[] = [];
-
-    // Handle text before the first anchor match
-    const firstAnchor = alignedAnchors[0];
-    if (firstAnchor.gtIndex > 0) {
-        alignedTokens.push(
-            ...interpolateMissingWords(
-                segmentStart,
-                tokens[firstAnchor.origIndex].start,
-                groundTruthWords.slice(0, firstAnchor.gtIndex),
-            ),
-        );
-    }
-
-    // Handle anchored and in-between segments
-    for (let i = 0; i < alignedAnchors.length; i++) {
-        const { gtIndex, origIndex } = alignedAnchors[i];
-        const currentToken = tokens[origIndex];
-
-        if (i > 0) {
-            const prevAnchor = alignedAnchors[i - 1];
-            alignedTokens.push(
-                ...interpolateMissingWords(
-                    tokens[prevAnchor.origIndex].end,
-                    currentToken.start,
-                    groundTruthWords.slice(prevAnchor.gtIndex + 1, gtIndex),
-                ),
-            );
-        }
-
-        alignedTokens.push({
-            end: currentToken.end,
-            start: currentToken.start,
-            text: groundTruthWords[gtIndex],
-        });
-    }
-
-    // Handle text after the last anchor match
-    const lastAnchor = alignedAnchors[alignedAnchors.length - 1];
-    if (lastAnchor.gtIndex < groundTruthWords.length - 1) {
-        alignedTokens.push(
-            ...interpolateMissingWords(
-                tokens[lastAnchor.origIndex].end,
-                segmentEnd,
-                groundTruthWords.slice(lastAnchor.gtIndex + 1),
-            ),
-        );
-    }
-
-    return { ...segment, tokens: alignedTokens };
+/**
+ * Produces a segment with the ground truth replacing the text and its respective tokens.
+ * @param segment The segment to replace the ground truth with.
+ * @param groundTruth The human verified transcription of the segment.
+ * @returns A segment with the ground truth applies to the segment text and its tokens.
+ */
+export const applyGroundTruthToSegment = (segment: Segment, groundTruth: string): Segment => {
+    const result = updateSegmentWithGroundTruth(segment, groundTruth);
+    return { ...result, tokens: result.tokens.filter((t) => !t.isUnknown) };
 };
 
 /**

@@ -23,7 +23,6 @@ export const buildLcsTable = (a: string[], b: string[]) => {
             }
         }
     }
-
     return table;
 };
 
@@ -38,14 +37,14 @@ export const buildLcsTable = (a: string[], b: string[]) => {
  * @param ground - Normalized ground truth words
  * @returns Array of match objects with `gtIndex` and `origIndex` pairs
  */
-export function extractLcsMatches(table: LCSTable, original: string[], ground: string[]) {
-    const matches: { gtIndex: number; origIndex: number }[] = [];
+export const extractLcsMatches = (table: LCSTable, original: string[], ground: string[]) => {
+    const matches = new Map<number, number>();
     let i = original.length;
     let j = ground.length;
 
     while (i > 0 && j > 0) {
         if (original[i - 1] === ground[j - 1]) {
-            matches.push({ gtIndex: j - 1, origIndex: i - 1 });
+            matches.set(i - 1, j - 1);
             i--;
             j--;
         } else if (table[i - 1][j] >= table[i][j - 1]) {
@@ -54,6 +53,5 @@ export function extractLcsMatches(table: LCSTable, original: string[], ground: s
             j--;
         }
     }
-
-    return matches.reverse();
-}
+    return matches;
+};

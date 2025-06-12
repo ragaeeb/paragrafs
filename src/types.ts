@@ -1,5 +1,20 @@
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 
+/**
+ * Represents a segment that was updated with the ground truth values.
+ */
+export type GroundedSegment = Omit<Segment, 'tokens'> & {
+    tokens: GroundedToken[];
+};
+
+/**
+ * Represents a token that was matched or unmatched during sync with the ground truth value.
+ */
+export type GroundedToken = Token & {
+    /** If this is true it means this token was not matched during the ground truth syncing */
+    isUnknown?: boolean;
+};
+
 export type Hints = Record<string, string[][]>;
 
 /**
@@ -48,7 +63,7 @@ export type Segment = Token & {
 
 /**
  * Represents a single token (word or phrase) with timing information.
- * This is the basic unit of transcribed or OCRed text.
+ * This is the basic unit of transcribed text.
  */
 export type Token = {
     /**
