@@ -1056,6 +1056,64 @@ describe('transcript', () => {
             expect(actual.tokens).toEqual(tokens);
         });
 
+        it.only('should not keep punctuation characters separately', () => {
+            const tokens = [
+                { end: 12.0, start: 10.0, text: 'الحمد' },
+                { end: 14.0, start: 12.0, text: 'لله' },
+                { end: 16.0, start: 14.0, text: 'رب' },
+                { end: 18.0, start: 16.0, text: 'العالمين' },
+            ];
+
+            const segment = {
+                end: 18.0,
+                start: 10.0,
+                text: '',
+                tokens,
+            };
+
+            const groundTruth = 'الحمد لله رب- العالمين، الصلاة! والسلام';
+
+            const result = updateSegmentWithGroundTruth(segment, groundTruth);
+
+            expect(result).toEqual({
+                end: 18,
+                start: 10,
+                text: 'الحمد لله رب- العالمين، الصلاة! والسلام',
+                tokens: [
+                    {
+                        end: 12,
+                        start: 10,
+                        text: 'الحمد',
+                    },
+                    {
+                        end: 14,
+                        start: 12,
+                        text: 'لله',
+                    },
+                    {
+                        end: 16,
+                        start: 14,
+                        text: 'رب-',
+                    },
+                    {
+                        end: 16,
+                        start: 16,
+                        text: 'العالمين،',
+                    },
+                    {
+                        end: 16,
+                        start: 16,
+                        text: 'الصلاة!',
+                    },
+                    {
+                        end: 18,
+                        start: 16,
+                        text: 'والسلام',
+                    },
+                ],
+            });
+        });
+
         it('should update the incorrect word when the total number of words is the same', () => {
             const actual = updateSegmentWithGroundTruth(
                 {

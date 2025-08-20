@@ -77,3 +77,32 @@ export const createHints = (...hints: string[]) => {
 
     return hintMap;
 };
+
+/**
+ * Tokenizes ground truth text properly, ensuring punctuation is attached to words
+ * rather than creating separate tokens.
+ * @param groundTruth The ground truth to tokenize.
+ * @returns The tokenized ground truth with the punctuations properly attached.
+ */
+export const tokenizeGroundTruth = (groundTruth: string): string[] => {
+    // First, let's split on whitespace and newlines to get word candidates
+    const rawTokens = groundTruth
+        .trim()
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter(Boolean);
+    const result: string[] = [];
+
+    for (const token of rawTokens) {
+        // Check if this token is just punctuation that should be attached to the previous word
+        // Updated regex to properly handle Arabic punctuation and other punctuation marks
+        if (result.length > 0 && /^[\p{P}\p{S}]+$/u.test(token)) {
+            // Attach punctuation to the previous word
+            result[result.length - 1] += token;
+        } else {
+            result.push(token);
+        }
+    }
+
+    return result;
+};

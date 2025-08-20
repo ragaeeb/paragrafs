@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import { formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord } from './textUtils';
+import { formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord, tokenizeGroundTruth } from './textUtils';
 
 describe('textUtils', () => {
     describe('formatSecondsToTimestamp', () => {
@@ -97,6 +97,116 @@ describe('textUtils', () => {
         it('should handle empty strings', () => {
             expect(normalizeWord('')).toBe('');
             expect(normalizeWord('.,!')).toBe('');
+        });
+    });
+
+    describe('tokenizeGroundTruth', () => {
+        it('should return empty array for empty string', () => {
+            const result = tokenizeGroundTruth('');
+            expect(result).toEqual([]);
+        });
+
+        it('should return empty array for whitespace-only string', () => {
+            const result = tokenizeGroundTruth('   \n\t  ');
+            expect(result).toEqual([]);
+        });
+
+        it('should tokenize simple words separated by spaces', () => {
+            const result = tokenizeGroundTruth('hello world test');
+            expect(result).toEqual(['hello', 'world', 'test']);
+        });
+
+        it('should handle multiple whitespace types (spaces, tabs, newlines)', () => {
+            const result = tokenizeGroundTruth('hello\tworld\ntest   more');
+            expect(result).toEqual(['hello', 'world', 'test', 'more']);
+        });
+
+        it('should attach punctuation to previous word', () => {
+            const result = tokenizeGroundTruth('hello world .');
+            expect(result).toEqual(['hello', 'world.']);
+        });
+
+        it('should attach multiple punctuation marks to previous word', () => {
+            const result = tokenizeGroundTruth('hello world ?!');
+            expect(result).toEqual(['hello', 'world?!']);
+        });
+
+        it('should handle punctuation with mixed whitespace', () => {
+            const result = tokenizeGroundTruth('hello world\n\t .');
+            expect(result).toEqual(['hello', 'world.']);
+        });
+
+        it('should handle Arabic text with punctuation', () => {
+            const result = tokenizeGroundTruth('الحمد لله ،');
+            expect(result).toEqual(['الحمد', 'لله،']);
+        });
+
+        it('should handle words that already have punctuation attached', () => {
+            const result = tokenizeGroundTruth('hello world, test.');
+            expect(result).toEqual(['hello', 'world,', 'test.']);
+        });
+
+        it('should handle consecutive punctuation tokens', () => {
+            const result = tokenizeGroundTruth('hello world , . !');
+            expect(result).toEqual(['hello', 'world,.!']);
+        });
+
+        it('should handle text starting with punctuation (edge case)', () => {
+            const result = tokenizeGroundTruth('. hello world');
+            expect(result).toEqual(['.', 'hello', 'world']);
+        });
+
+        it('should handle mixed content with Arabic and English', () => {
+            const result = tokenizeGroundTruth('hello الحمد world .');
+            expect(result).toEqual(['hello', 'الحمد', 'world.']);
+        });
+
+        it('should handle complex punctuation patterns', () => {
+            const result = tokenizeGroundTruth('word1 ; word2 : word3 !');
+            expect(result).toEqual(['word1;', 'word2:', 'word3!']);
+        });
+
+        it('should handle numbers and punctuation', () => {
+            const result = tokenizeGroundTruth('123 456 .');
+            expect(result).toEqual(['123', '456.']);
+        });
+
+        it('should trim leading and trailing whitespace', () => {
+            const result = tokenizeGroundTruth('   hello world   ');
+            expect(result).toEqual(['hello', 'world']);
+        });
+
+        it('should handle single word', () => {
+            const result = tokenizeGroundTruth('hello');
+            expect(result).toEqual(['hello']);
+        });
+
+        it('should handle single word with punctuation', () => {
+            const result = tokenizeGroundTruth('hello .');
+            expect(result).toEqual(['hello.']);
+        });
+
+        it('should handle only punctuation marks', () => {
+            const result = tokenizeGroundTruth('.');
+            expect(result).toEqual(['.']);
+        });
+
+        it('should handle complex Arabic text from the original test', () => {
+            const text = 'محمد وعلى آله وصحبه أجمعين ومن تبعهم بإحسان إلى يوم الدين ؛';
+            const result = tokenizeGroundTruth(text);
+            expect(result).toEqual([
+                'محمد',
+                'وعلى',
+                'آله',
+                'وصحبه',
+                'أجمعين',
+                'ومن',
+                'تبعهم',
+                'بإحسان',
+                'إلى',
+                'يوم',
+                'الدين؛',
+            ]);
         });
     });
 });

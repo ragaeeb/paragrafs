@@ -1,7 +1,7 @@
 import type { GroundedToken, Hints, Token } from '@/types';
 
 import { buildLcsTable, extractLcsMatches } from './lcs';
-import { normalizeWord } from './textUtils';
+import { normalizeWord, tokenizeGroundTruth } from './textUtils';
 
 /**
  * Determines whether any hint phrase in `hints` matches the sequence of tokens
@@ -240,7 +240,7 @@ const processFinalTail = (
 export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): GroundedToken[] => {
     if (tokens.length === 0) return [];
 
-    const groundTruthWords = groundTruth.trim().match(/[\w\u0600-\u06FF]+[؟،.]?|\S+/g) || [];
+    const groundTruthWords = tokenizeGroundTruth(groundTruth);
     if (groundTruthWords.length === 0) {
         return tokens.map((token) => ({ ...token, isUnknown: true }));
     }
