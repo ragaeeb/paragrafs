@@ -11,7 +11,10 @@ describe('transcriptUtils', () => {
                 { end: 2, start: 2, text: 'brown' },
                 { end: 4, start: 3, text: 'fox' },
             ];
-            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox');
+            const actual = syncTokensWithGroundTruth(
+                tokens,
+                'The quick brown fox',
+            );
             expect(actual).toEqual(tokens);
         });
 
@@ -26,7 +29,10 @@ describe('transcriptUtils', () => {
                 { end: 9, start: 8, text: 'last' },
                 { end: 10, start: 9, text: 'dog' },
             ];
-            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
+            const actual = syncTokensWithGroundTruth(
+                tokens,
+                'The quick brown fox jumps right over the lazy dog.',
+            );
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, start: 1, text: 'quick' },
@@ -59,7 +65,10 @@ describe('transcriptUtils', () => {
                 { end: 14, start: 13, text: 'lazy' },
                 { end: 15, start: 14, text: 'dog' },
             ];
-            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog');
+            const actual = syncTokensWithGroundTruth(
+                tokens,
+                'The quick brown fox jumps right over the lazy dog',
+            );
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, isUnknown: true, start: 1, text: 'uh' }, // since this token was not matched we keep it always with a fixed confidence of 0.5
@@ -92,7 +101,10 @@ describe('transcriptUtils', () => {
                 { end: 9, start: 8, text: 'lays' },
                 { end: 10, start: 9, text: 'dock' },
             ];
-            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
+            const actual = syncTokensWithGroundTruth(
+                tokens,
+                'The quick brown fox jumps right over the lazy dog.',
+            );
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, start: 1, text: 'quick' },
@@ -120,7 +132,10 @@ describe('transcriptUtils', () => {
                 { end: 10, start: 9, text: 'crazy' },
                 { end: 11, start: 10, text: 'dog' },
             ];
-            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
+            const actual = syncTokensWithGroundTruth(
+                tokens,
+                'The quick brown fox jumps right over the lazy dog.',
+            );
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, start: 1, text: 'quick' },

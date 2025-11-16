@@ -1,4 +1,4 @@
-import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
+import type { AlwaysBreakMarker, SegmentBreakMarker } from './utils/constants';
 
 /**
  * Represents a segment that was updated with the ground truth values.
@@ -42,7 +42,7 @@ export type MarkedSegment = {
  * Represents either a token or a segment break marker.
  * Used during the processing of text to identify natural break points.
  */
-export type MarkedToken = Token | typeof ALWAYS_BREAK | typeof SEGMENT_BREAK;
+export type MarkedToken = Token | AlwaysBreakMarker | SegmentBreakMarker;
 
 export type MarkTokensWithDividersOptions = {
     fillers?: string[];

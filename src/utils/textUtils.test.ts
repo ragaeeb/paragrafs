@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 
-import { formatSecondsToTimestamp, isEndingWithPunctuation, normalizeWord, tokenizeGroundTruth } from './textUtils';
+import {
+    formatSecondsToTimestamp,
+    isEndingWithPunctuation,
+    normalizeWord,
+    tokenizeGroundTruth,
+} from './textUtils';
 
 describe('textUtils', () => {
     describe('formatSecondsToTimestamp', () => {
@@ -192,7 +197,8 @@ describe('textUtils', () => {
         });
 
         it('should handle complex Arabic text from the original test', () => {
-            const text = 'محمد وعلى آله وصحبه أجمعين ومن تبعهم بإحسان إلى يوم الدين ؛';
+            const text =
+                'محمد وعلى آله وصحبه أجمعين ومن تبعهم بإحسان إلى يوم الدين ؛';
             const result = tokenizeGroundTruth(text);
             expect(result).toEqual([
                 'محمد',
