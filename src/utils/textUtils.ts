@@ -7,7 +7,8 @@ import type { Hints } from '../types';
  * @param {string} text - The text to check for ending punctuation
  * @returns {boolean} True if the text ends with punctuation, false otherwise
  */
-export const isEndingWithPunctuation = (text: string): boolean => /[.؟!?]$/.test(text);
+export const isEndingWithPunctuation = (text: string): boolean =>
+    /[.؟!?]$/.test(text);
 
 /**
  * Formats seconds into a human-readable timestamp.

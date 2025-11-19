@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
-
-import type { MarkedSegment, MarkedToken, Segment, Token } from './types';
-
 import {
+    applyGroundTruthToSegment,
     cleanupIsolatedTokens,
     estimateSegmentFromToken,
     formatSegmentsToTimestampedTranscript,
@@ -17,6 +15,7 @@ import {
     splitSegment,
     updateSegmentWithGroundTruth,
 } from './transcript';
+import type { MarkedSegment, MarkedToken, Segment, Token } from './types';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 import { createHints } from './utils/textUtils';
 
@@ -31,7 +30,11 @@ function roundTokenTimes(tokens: Token[]): Token[] {
 describe('transcript', () => {
     describe('estimateSegmentFromToken', () => {
         it('should correctly estimate the segment tokens', () => {
-            const actual = estimateSegmentFromToken({ end: 2, start: 0, text: 'Hello world.' });
+            const actual = estimateSegmentFromToken({
+                end: 2,
+                start: 0,
+                text: 'Hello world.',
+            });
 
             expect(actual).toEqual({
                 end: 2,
@@ -71,7 +74,10 @@ describe('transcript', () => {
                 { end: 20, start: 19, text: 'dog.' },
             ];
 
-            const actual = markTokensWithDividers(tokens, { fillers: ['uh', 'umm', 'hmmm'], gapThreshold: 3 });
+            const actual = markTokensWithDividers(tokens, {
+                fillers: ['uh', 'umm', 'hmmm'],
+                gapThreshold: 3,
+            });
 
             expect(actual).toEqual([
                 SEGMENT_BREAK,
@@ -387,7 +393,11 @@ describe('transcript', () => {
                 {
                     end: 19,
                     start: 16,
-                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
+                    tokens: [
+                        { end: 17, start: 16, text: 'lazy' },
+                        { end: 19, start: 18, text: 'dog.' },
+                        SEGMENT_BREAK,
+                    ],
                 },
             ] as MarkedSegment[];
 
@@ -445,7 +455,11 @@ describe('transcript', () => {
                 {
                     end: 19,
                     start: 16,
-                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
+                    tokens: [
+                        { end: 17, start: 16, text: 'lazy' },
+                        { end: 19, start: 18, text: 'dog.' },
+                        SEGMENT_BREAK,
+                    ],
                 },
             ] as MarkedSegment[];
 
@@ -501,7 +515,11 @@ describe('transcript', () => {
                 {
                     end: 19,
                     start: 16,
-                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
+                    tokens: [
+                        { end: 17, start: 16, text: 'lazy' },
+                        { end: 19, start: 18, text: 'dog.' },
+                        SEGMENT_BREAK,
+                    ],
                 },
             ] as MarkedSegment[];
 
@@ -687,7 +705,9 @@ describe('transcript', () => {
             const result = markAndCombineSegments(segments, options);
 
             // Should have a segment break due to the gap
-            const segmentBreakCount = result[0].tokens.filter((t) => t === SEGMENT_BREAK).length;
+            const segmentBreakCount = result[0].tokens.filter(
+                (t) => t === SEGMENT_BREAK,
+            ).length;
             expect(segmentBreakCount).toBeGreaterThan(0);
         });
 
@@ -754,7 +774,9 @@ describe('transcript', () => {
 
             // Verify that "Too short" was merged with the previous segment
             const allTokenTexts = result.flatMap((segment) =>
-                segment.tokens.filter((token) => token !== SEGMENT_BREAK).map((token) => (token as any).text),
+                segment.tokens
+                    .filter((token): token is Token => token !== SEGMENT_BREAK)
+                    .map((token) => token.text),
             );
 
             expect(allTokenTexts).toContain('Too');
@@ -786,7 +808,11 @@ describe('transcript', () => {
             // Find if there's a SEGMENT_BREAK right after "sentence."
             const hasPunctuationBreak = segmentBreakIndexes.some((index) => {
                 const prevToken = result[0].tokens[index - 1];
-                return prevToken !== SEGMENT_BREAK && typeof prevToken !== 'string' && prevToken.text === 'sentence.';
+                return (
+                    prevToken !== SEGMENT_BREAK &&
+                    typeof prevToken !== 'string' &&
+                    prevToken.text === 'sentence.'
+                );
             });
 
             expect(hasPunctuationBreak).toBeTrue();
@@ -901,7 +927,11 @@ describe('transcript', () => {
 
             const hasPunctuationBreak = segmentBreakIndexes.some((index) => {
                 const prevToken = result[0].tokens[index - 1];
-                return prevToken !== SEGMENT_BREAK && typeof prevToken !== 'string' && prevToken.text === 'بالعالم؟';
+                return (
+                    prevToken !== SEGMENT_BREAK &&
+                    typeof prevToken !== 'string' &&
+                    prevToken.text === 'بالعالم؟'
+                );
             });
 
             expect(hasPunctuationBreak).toBeTrue();
@@ -941,7 +971,9 @@ describe('transcript', () => {
             ];
 
             const result = formatSegmentsToTimestampedTranscript(segments, 5);
-            expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
+            expect(result).toEqual(
+                ['0:00: Hello there.', '0:06: How are you?'].join('\n'),
+            );
         });
 
         it('should always create a new segment when encountering a always break token', () => {
@@ -960,7 +992,9 @@ describe('transcript', () => {
             ];
 
             const result = formatSegmentsToTimestampedTranscript(segments, 100);
-            expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
+            expect(result).toEqual(
+                ['0:00: Hello there.', '0:06: How are you?'].join('\n'),
+            );
         });
 
         it('does not break long sentences if no punctuation is present', () => {
@@ -993,9 +1027,13 @@ describe('transcript', () => {
                 },
             ];
 
-            const result = formatSegmentsToTimestampedTranscript(segments, 10, (buffer) => {
-                return `> [${buffer.start}s]: ${buffer.text.toUpperCase()}`;
-            });
+            const result = formatSegmentsToTimestampedTranscript(
+                segments,
+                10,
+                (buffer) => {
+                    return `> [${buffer.start}s]: ${buffer.text.toUpperCase()}`;
+                },
+            );
 
             expect(result).toEqual('> [0s]: TESTING FORMATTER.');
         });
@@ -1052,11 +1090,14 @@ describe('transcript', () => {
                 },
             ];
 
-            const actual = updateSegmentWithGroundTruth({ end: 6, start: 0, text: '', tokens }, 'The quick brown fox');
+            const actual = updateSegmentWithGroundTruth(
+                { end: 6, start: 0, text: '', tokens },
+                'The quick brown fox',
+            );
             expect(actual.tokens).toEqual(tokens);
         });
 
-        it.only('should not keep punctuation characters separately', () => {
+        it('should not keep punctuation characters separately', () => {
             const tokens = [
                 { end: 12.0, start: 10.0, text: 'الحمد' },
                 { end: 14.0, start: 12.0, text: 'لله' },
@@ -1189,7 +1230,10 @@ describe('transcript', () => {
                     { end: 10, start: 9, text: 'dog' },
                 ],
             };
-            const actual = updateSegmentWithGroundTruth(segment, 'The quick brown fox jumps right over the lazy dog.');
+            const actual = updateSegmentWithGroundTruth(
+                segment,
+                'The quick brown fox jumps right over the lazy dog.',
+            );
             const got = roundTokenTimes(actual.tokens);
 
             expect(got).toEqual([
@@ -1244,6 +1288,45 @@ describe('transcript', () => {
                     text: 'dog.',
                 },
             ]);
+        });
+    });
+
+    describe('applyGroundTruthToSegment', () => {
+        it('should remove unknown tokens after applying the ground truth', () => {
+            const segment: Segment = {
+                end: 6,
+                start: 0,
+                text: 'A rough transcription',
+                tokens: [
+                    { end: 1, start: 0, text: 'A' },
+                    { end: 2, start: 1, text: 'rough' },
+                    { end: 3, start: 2, text: 'transcription' },
+                ],
+            };
+
+            const result = applyGroundTruthToSegment(
+                segment,
+                'A polished transcript',
+            );
+
+            expect(result).toEqual({
+                end: 6,
+                start: 0,
+                text: 'A polished transcript',
+                tokens: [
+                    { end: 1, start: 0, text: 'A' },
+                    { end: 2, start: 1, text: 'polished' },
+                    { end: 3, start: 2, text: 'transcript' },
+                ],
+            });
+
+            const tokenHasUnknownFlag = (
+                token: Token,
+            ): token is Token & { isUnknown?: boolean } => 'isUnknown' in token;
+
+            expect(
+                result.tokens.every((token) => !tokenHasUnknownFlag(token)),
+            ).toBeTrue();
         });
     });
 
@@ -1462,7 +1545,7 @@ describe('transcript', () => {
     });
 
     describe('getFirstMatchingToken', () => {
-        let tokens;
+        let tokens: Token[];
 
         beforeEach(() => {
             tokens = [
@@ -1480,11 +1563,19 @@ describe('transcript', () => {
         });
 
         it('should return the first text object for a single text match', () => {
-            expect(getFirstMatchingToken(tokens, 'fox')).toEqual({ end: 17, start: 16, text: 'fox' });
+            expect(getFirstMatchingToken(tokens, 'fox')).toEqual({
+                end: 17,
+                start: 16,
+                text: 'fox',
+            });
         });
 
         it('should return the first text object for a consecutive text match', () => {
-            expect(getFirstMatchingToken(tokens, 'the lazy')).toEqual({ end: 25, start: 24, text: 'the' });
+            expect(getFirstMatchingToken(tokens, 'the lazy')).toEqual({
+                end: 25,
+                start: 24,
+                text: 'the',
+            });
         });
 
         it('should return null if the text is not found', () => {
@@ -1492,15 +1583,27 @@ describe('transcript', () => {
         });
 
         it('should return the first text object if all the consecutive tokens match', () => {
-            expect(getFirstMatchingToken(tokens, 'the quick brown')).toEqual({ end: 11, start: 10, text: 'the' });
+            expect(getFirstMatchingToken(tokens, 'the quick brown')).toEqual({
+                end: 11,
+                start: 10,
+                text: 'the',
+            });
         });
 
         it('should correctly handle the first text of the text', () => {
-            expect(getFirstMatchingToken(tokens, 'the')).toEqual({ end: 11, start: 10, text: 'the' });
+            expect(getFirstMatchingToken(tokens, 'the')).toEqual({
+                end: 11,
+                start: 10,
+                text: 'the',
+            });
         });
 
         it('should correctly handle the last text of the text', () => {
-            expect(getFirstMatchingToken(tokens, 'dog')).toEqual({ end: 29, start: 28, text: 'dog' });
+            expect(getFirstMatchingToken(tokens, 'dog')).toEqual({
+                end: 29,
+                start: 28,
+                text: 'dog',
+            });
         });
 
         it('should return null for a non-consecutive text match', () => {

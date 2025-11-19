@@ -17,15 +17,12 @@ A lightweight TypeScript library designed to reconstruct paragraphs from AI tran
 
 ## Features
 
-- **Segment Recognition**: Intelligently groups text into logical paragraphs
-- **Filler Removal**: Identifies and removes common speech fillers (uh, umm, etc.)
-- **Gap Detection**: Detects significant pauses to identify paragraph breaks
-- **Timestamp Formatting**: Converts seconds to readable timestamps (HH:MM:SS)
-- **Punctuation Awareness**: Uses punctuation to identify natural segment breaks
-- **Customizable Parameters**: Configure minimum words per segment, max segment length, etc.
-- **Arabic Support**: Handles Arabic question marks and other non-Latin punctuation
-- **Transcript Formatting**: Converts raw token streams into readable text with appropriate line breaks
-- **Ground-Truth Token Mapping**: Aligns AI-generated word timestamps to human-edited transcript text using an LCS-based algorithm with intelligent interpolation
+- **Segment reconstruction** – marks filler words, hints, and time gaps to create natural paragraph boundaries and merges overly short segments back into their predecessors.【F:src/transcript.ts†L40-L204】【F:src/transcript.ts†L236-L300】
+- **Timestamped formatting** – produces human-friendly transcripts with optional custom formatting callbacks and automatic timestamp rendering.【F:src/transcript.ts†L212-L300】
+- **Ground-truth alignment** – synchronises AI generated tokens with human edited text, interpolating timings for missing words and removing unknown tokens when applying the ground truth.【F:src/utils/transcriptUtils.ts†L1-L226】【F:src/transcript.ts†L328-L395】
+- **Selection helpers** – exposes utilities to find tokens for string queries or cursor selections, enabling rich text editors to jump to precise timestamps.【F:src/transcript.ts†L424-L493】
+- **Utility toolkit** – includes helpers for timestamp formatting, punctuation detection (including Arabic punctuation), and hint creation for multi-word matching.【F:src/utils/textUtils.ts†L4-L73】
+- **Bun-native toolchain** – powered by the upstream `tsdown` CLI for bundling and Biome for linting, so the same commands run locally and in CI without any custom wrappers.【F:package.json†L7-L41】【F:tsdown.config.ts†L1-L9】【F:biome.json†L1-L16】
 
 ## Installation
 
@@ -151,77 +148,69 @@ console.log(aligned.tokens);
 // with missing words interpolated where needed.
 ```
 
+## Commands
+
+- `bun run build` – compiles the library with the official tsdown pipeline configured in `tsdown.config.ts`.【F:package.json†L33-L41】【F:tsdown.config.ts†L1-L9】
+- `bun run lint` – runs Biome’s formatter and linter against the repository root.【F:package.json†L33-L41】【F:biome.json†L1-L16】
+- `bun test` – executes the Bun test suite with coverage output configured in `package.json`.【F:package.json†L33-L41】
+
 ## API Reference
 
-### Core Functions
+### Transcript builders
 
-#### `estimateSegmentFromToken(token: Token): Segment`
+- `estimateSegmentFromToken(token: Token): Segment` – splits multi-word tokens into per-word timings so they can participate in downstream processing.【F:src/transcript.ts†L15-L39】
+- `markTokensWithDividers(tokens: Token[], options: MarkTokensWithDividersOptions): MarkedToken[]` – inserts divider markers based on fillers, hints, punctuation, and timing gaps.【F:src/transcript.ts†L44-L121】
+- `groupMarkedTokensIntoSegments(markedTokens: MarkedToken[], maxSecondsPerSegment: number): MarkedSegment[]` – chunks marked tokens into bounded-length segments.【F:src/transcript.ts†L123-L171】
+- `mergeShortSegmentsWithPrevious(segments: MarkedSegment[], minWordsPerSegment: number): MarkedSegment[]` – merges segments that contain fewer than the required word count into their predecessors.【F:src/transcript.ts†L173-L211】
+- `cleanupIsolatedTokens(markedTokens: MarkedToken[]): MarkedToken[]` – removes redundant divider markers that would isolate a single token on a line.【F:src/transcript.ts†L314-L326】
+- `markAndCombineSegments(segments: Segment[], options): MarkedSegment[]` – convenience pipeline that flattens tokens, marks dividers, groups, and merges short runs in one call.【F:src/transcript.ts†L302-L326】
+- `mapSegmentsIntoFormattedSegments(segments: MarkedSegment[], maxSecondsPerLine?: number): Segment[]` – flattens marked segments into readable text while respecting optional line duration caps.【F:src/transcript.ts†L236-L300】
+- `formatSegmentsToTimestampedTranscript(segments: MarkedSegment[], maxSecondsPerLine: number, formatTokens?: (buffer: Token) => string): string` – emits newline separated transcript lines with timestamps or a custom formatter.【F:src/transcript.ts†L204-L234】
 
-Splits a single token into word-level tokens and estimates timing for each word.
+### Ground-truth alignment
 
-#### `markTokensWithDividers(tokens: Token[], options): MarkedToken[]`
+- `updateSegmentWithGroundTruth(segment: Segment, groundTruth: string): GroundedSegment` – applies LCS-based alignment to replace tokens with the ground-truth words while flagging unmatched entries.【F:src/transcript.ts†L328-L359】
+- `applyGroundTruthToSegment(segment: Segment, groundTruth: string): Segment` – wraps `updateSegmentWithGroundTruth` and filters unknown tokens for production-ready output.【F:src/transcript.ts†L361-L395】
+- `mergeSegments(segments: Segment[], delimiter?: string): Segment` – concatenates sequential segments into one continuous block, preserving timing.【F:src/transcript.ts†L397-L411】
+- `splitSegment(segment: Segment, splitTime: number): Segment[]` – divides a segment into two at a specific timestamp.【F:src/transcript.ts†L413-L448】
 
-Marks tokens with segment breaks based on fillers, gaps, and punctuation.
+### Editor helpers
 
-#### `groupMarkedTokensIntoSegments(markedTokens: MarkedToken[], maxSecondsPerSegment: number): MarkedSegment[]`
+- `getFirstMatchingToken(tokens: Token[], query: string): Token | null` – scans for the first occurrence of a hint sequence produced by `createHints`.【F:src/transcript.ts†L450-L493】
+- `getFirstTokenForSelection(segment: Segment, selectionStart: number, selectionEnd: number): Token | null` – maps character selections within `segment.text` back to the corresponding timed token.【F:src/transcript.ts†L495-L546】
 
-Groups marked tokens into logical segments based on maximum segment length.
+### Utility functions
 
-#### `mergeShortSegmentsWithPrevious(segments: MarkedSegment[], minWordsPerSegment: number): MarkedSegment[]`
-
-Merges segments with too few words into the previous segment.
-
-#### `mapSegmentsIntoFormattedSegments(segments: MarkedSegment[], maxSecondsPerLine?: number): Segment[]`
-
-Converts marked segments into clean, formatted segments with proper text representation.
-
-#### `formatSegmentsToTimestampedTranscript(segments: MarkedSegment[], maxSecondsPerLine: number): string`
-
-Formats segments into a human-readable transcript with timestamps.
-
-#### `markAndCombineSegments(segments: Segment[], options): MarkedSegment[]`
-
-Combined utility that processes segments through all the necessary steps.
-
-#### `mapTokensToGroundTruth(segment: Segment): Segment`
-
-Synchronizes AI-generated word timestamps with the human-edited transcript (`segment.text`):
-
-- Uses a longest-common-subsequence (LCS) to find matching words and preserve their original timing.
-- Evenly interpolates timestamps for runs of missing words (only when two or more are missing).
-- Falls back to `estimateSegmentFromToken` if no matches are found.
+- `createHints(...hints: string[]): Hints` – splits one or more hint strings into lookup maps keyed by the first word.【F:src/utils/textUtils.ts†L49-L73】
+- `formatSecondsToTimestamp(seconds: number): string` – renders numeric durations into `m:ss` or `h:mm:ss` strings.【F:src/utils/textUtils.ts†L14-L33】
+- `isEndingWithPunctuation(text: string): boolean` – checks for trailing punctuation, including Arabic variants.【F:src/utils/textUtils.ts†L4-L12】
+- `tokenizeGroundTruth(groundTruth: string): string[]` – tokenises human transcripts while attaching punctuation to the preceding word.【F:src/utils/textUtils.ts†L75-L112】
 
 ### Types
 
 ```typescript
 type Token = {
-    start: number; // Start time in seconds
-    end: number; // End time in seconds
-    text: string; // The transcribed text
+    start: number;
+    end: number;
+    text: string;
 };
 
 type Segment = Token & {
-    tokens: Token[]; // Word-by-word breakdown with timings
+    tokens: Token[];
 };
 
-type MarkedToken = 'SEGMENT_BREAK' | Token;
+type MarkedToken = Token | typeof SEGMENT_BREAK | typeof ALWAYS_BREAK;
 
 type MarkedSegment = {
     start: number;
     end: number;
     tokens: MarkedToken[];
 };
+
+type GroundedToken = Token & { isUnknown?: boolean };
+
+type GroundedSegment = Omit<Segment, 'tokens'> & { tokens: GroundedToken[] };
 ```
-
-### Utility Functions
-
-#### `isEndingWithPunctuation(text: string): boolean`
-
-Checks if the text ends with punctuation (including Arabic punctuation).
-
-#### `formatSecondsToTimestamp(seconds: number): string`
-
-Formats seconds into a human-readable timestamp (H:MM:SS).
 
 ## Use Cases
 
@@ -238,8 +227,10 @@ To get started:
 1. Fork the repository
 2. Install dependencies: `bun install` (requires [Bun](https://bun.sh/))
 3. Make your changes
-4. Run tests: `bun test`
-5. Submit a pull request
+4. Run linting: `bun run lint`
+5. Build the package: `bun run build`
+6. Run tests: `bun test`
+7. Submit a pull request
 
 ## License
 

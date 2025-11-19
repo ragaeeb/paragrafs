@@ -95,7 +95,13 @@ type CreateInsertionTokenProps = {
  */
 const createInsertionToken = (
     text: string,
-    { gtGap, gtGapIndex, nextToken, prevToken, tokenGap }: CreateInsertionTokenProps,
+    {
+        gtGap,
+        gtGapIndex,
+        nextToken,
+        prevToken,
+        tokenGap,
+    }: CreateInsertionTokenProps,
 ): Token => {
     const gapStartTime = prevToken?.end ?? 0;
     const gapEndTime = nextToken.start;
@@ -118,12 +124,19 @@ const createInsertionToken = (
  * between the token and ground truth sequences.
  * @returns An array of [tokenIndex, gtIndex] pairs.
  */
-const findAnchors = (tokens: Token[], groundTruthWords: string[]): [number, number][] => {
+const findAnchors = (
+    tokens: Token[],
+    groundTruthWords: string[],
+): [number, number][] => {
     const normalizedTokens = tokens.map((t) => normalizeWord(t.text));
     const normalizedGTWords = groundTruthWords.map(normalizeWord);
 
     const lcsTable = buildLcsTable(normalizedTokens, normalizedGTWords);
-    const lcsMatches = extractLcsMatches(lcsTable, normalizedTokens, normalizedGTWords);
+    const lcsMatches = extractLcsMatches(
+        lcsTable,
+        normalizedTokens,
+        normalizedGTWords,
+    );
 
     // Enforce hard constraints for first and last tokens.
     lcsMatches.set(0, 0);
@@ -177,7 +190,8 @@ const processGaps = (
                     gtGap,
                     gtGapIndex,
                     nextToken: tokens[currentTokenIndex],
-                    prevToken: lastTokenIndex === -1 ? null : tokens[lastTokenIndex],
+                    prevToken:
+                        lastTokenIndex === -1 ? null : tokens[lastTokenIndex],
                     tokenGap,
                 });
                 result.push(insertion);
@@ -215,7 +229,10 @@ const processFinalTail = (
 
     while (tokenIdx < finalTokenGap.length || gtIdx < finalGtGap.length) {
         if (tokenIdx < finalTokenGap.length && gtIdx < finalGtGap.length) {
-            result.push({ ...finalTokenGap[tokenIdx], text: finalGtGap[gtIdx] });
+            result.push({
+                ...finalTokenGap[tokenIdx],
+                text: finalGtGap[gtIdx],
+            });
             tokenIdx++;
             gtIdx++;
         } else if (tokenIdx < finalTokenGap.length) {
@@ -237,7 +254,10 @@ const processFinalTail = (
  * @param groundTruth The human-agent verified text for the transcription.
  * @returns The corrected tokens with a best-effort of the ground truth values applied.
  */
-export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): GroundedToken[] => {
+export const syncTokensWithGroundTruth = (
+    tokens: Token[],
+    groundTruth: string,
+): GroundedToken[] => {
     if (tokens.length === 0) return [];
 
     const groundTruthWords = tokenizeGroundTruth(groundTruth);
@@ -249,10 +269,20 @@ export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string):
     const anchors = findAnchors(tokens, groundTruthWords);
 
     // 2. Process the segments between the anchors.
-    const { lastGtIndex, lastTokenIndex, result } = processGaps(tokens, groundTruthWords, anchors);
+    const { lastGtIndex, lastTokenIndex, result } = processGaps(
+        tokens,
+        groundTruthWords,
+        anchors,
+    );
 
     // 3. Process any remaining tokens after the last anchor.
-    processFinalTail(result, tokens, groundTruthWords, lastTokenIndex, lastGtIndex);
+    processFinalTail(
+        result,
+        tokens,
+        groundTruthWords,
+        lastTokenIndex,
+        lastGtIndex,
+    );
 
     return result;
 };
