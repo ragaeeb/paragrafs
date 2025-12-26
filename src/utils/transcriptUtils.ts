@@ -4,40 +4,35 @@ import { buildLcsTable, extractLcsMatches } from './lcs';
 import { normalizeWord, tokenizeGroundTruth } from './textUtils';
 
 /**
- * Determines whether any hint phrase in `hints` matches the sequence of tokens
+ * Determines whether any hint phrase in `hints` matches the sequence of normalized token texts
  * starting at the given index.
  *
- * Looks up candidate word arrays under the key `tokens[index].text` in the `hints` map,
+ * Looks up candidate word arrays under the key `normalizedTokens[index]` in the `hints` map,
  * then for each candidate phrase checks if every word matches the corresponding
- * token in `tokens` at successive positions.
+ * normalized token text at successive positions.
  *
- * @param tokens
- *   The full array of `Token` objects being scanned.
+ * @param normalizedTokens
+ *   The full array of normalized token text strings being scanned.
  * @param hints
  *   A `Hints` map (from first word to arrays of word arrays), as produced by `createHints`.
  * @param index
- *   The position in `tokens` at which to try matching each hint phrase.
+ *   The position in `normalizedTokens` at which to try matching each hint phrase.
  * @returns
- *   `true` if at least one hint phrase completely matches the tokens starting at `index`;
+ *   `true` if at least one hint phrase completely matches the normalized token text starting at `index`;
  *   otherwise `false`.
  *
  * @example
  * ```ts
- * const tokens: Token[] = [
- *   { start: 0, end: 1, text: 'jump' },
- *   { start: 1, end: 2, text: 'over' },
- *   { start: 2, end: 3, text: 'the' },
- *   { start: 3, end: 4, text: 'moon' },
- * ];
- * const hints = createHints('jump over', 'the moon');
+ * const normalizedTokens = ['jump', 'over', 'the', 'moon'];
+ * const hints = createHints({ normalizeAlef: false, normalizeYa: false, normalizeHamza: false, removeTatweel: false }, 'jump over', 'the moon');
  *
- * isHintMatched(tokens, hints, 0);
+ * isHintMatched(normalizedTokens, hints, 0);
  * // → true  (matches ['jump','over'])
  *
- * isHintMatched(tokens, hints, 2);
+ * isHintMatched(normalizedTokens, hints, 2);
  * // → true  (matches ['the','moon'])
  *
- * isHintMatched(tokens, hints, 1);
+ * isHintMatched(normalizedTokens, hints, 1);
  * // → false (no hint starts with 'over')
  * ```
  */

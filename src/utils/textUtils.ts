@@ -1,8 +1,8 @@
 import type { ArabicNormalizationOptions, HintMap, Hints } from '../types';
 
 /**
- * Checks if a text string ends with a punctuation mark (period, question mark, exclamation mark).
- * Supports both Latin and Arabic punctuation.
+ * Checks if a text string ends with sentence-ending punctuation.
+ * Supports: period (.), question mark (? / ؟), exclamation (!), Arabic semicolon (؛), ellipsis (…).
  *
  * @param {string} text - The text to check for ending punctuation
  * @returns {boolean} True if the text ends with punctuation, false otherwise

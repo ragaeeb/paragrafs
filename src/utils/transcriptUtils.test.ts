@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 
-import type { Hints } from '../types';
+import type { ArabicNormalizationOptions, Hints } from '../types';
 
 import { isHintMatched, syncTokensWithGroundTruth } from './transcriptUtils';
 
@@ -8,19 +8,19 @@ describe('transcriptUtils', () => {
     describe('isHintMatched', () => {
         it('returns false when no candidates exist for the token at index', () => {
             const normalizedTokens = ['hello', 'world'];
-            const hints: Hints = { map: {} };
+            const hints: Hints = { map: {}, normalization: {} as Required<ArabicNormalizationOptions> };
             expect(isHintMatched(normalizedTokens, hints, 0)).toBeFalse();
         });
 
         it('returns false when a candidate phrase runs past the end of the token list', () => {
             const normalizedTokens = ['a', 'b'];
-            const hints: Hints = { map: { a: [['a', 'b', 'c']] } };
+            const hints: Hints = { map: { a: [['a', 'b', 'c']] }, normalization: {} as Required<ArabicNormalizationOptions> };
             expect(isHintMatched(normalizedTokens, hints, 0)).toBeFalse();
         });
 
         it('returns true when a candidate phrase matches', () => {
             const normalizedTokens = ['a', 'b', 'c'];
-            const hints: Hints = { map: { a: [['a', 'b']] } };
+            const hints: Hints = { map: { a: [['a', 'b']] }, normalization: {} as Required<ArabicNormalizationOptions> };
             expect(isHintMatched(normalizedTokens, hints, 0)).toBeTrue();
         });
     });
