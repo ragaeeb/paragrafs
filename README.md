@@ -194,6 +194,8 @@ const marked = markTokensWithDividers(tokens, { fillers: [], gapThreshold: 999, 
 
 This repo includes a minimal static demo app in `demo/` that exercises the major exported functions with configurable JSON/text inputs. It’s intended to be deployed to **`paragrafs.surge.sh`**.
 
+- Live demo: [paragrafs.surge.sh](https://paragrafs.surge.sh)
+
 - **Install**: `bun run demo:install`
 - **Dev**: `bun run demo:dev`
 - **Build**: `bun run demo:build`
