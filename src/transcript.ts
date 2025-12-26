@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
-import { createHints, formatSecondsToTimestamp, isEndingWithPunctuation } from './utils/textUtils';
+import { createHints, formatSecondsToTimestamp, isEndingWithPunctuation, normalizeTokenText } from './utils/textUtils';
 import { isHintMatched, syncTokensWithGroundTruth } from './utils/transcriptUtils';
 
 /**
@@ -57,6 +57,7 @@ export const markTokensWithDividers = (
 ): MarkedToken[] => {
     const marked: MarkedToken[] = [];
     let prevEnd: null | number = null;
+    const normalizedTexts = hints ? tokens.map((t) => normalizeTokenText(t.text, hints.normalization)) : null;
 
     for (let idx = 0; idx < tokens.length; idx++) {
         const token = tokens[idx];
@@ -67,7 +68,7 @@ export const markTokensWithDividers = (
             continue;
         }
 
-        if (hints && isHintMatched(tokens, hints, idx)) {
+        if (hints && normalizedTexts && isHintMatched(normalizedTexts, hints, idx)) {
             marked.push(ALWAYS_BREAK);
         }
 
@@ -107,27 +108,42 @@ export const groupMarkedTokensIntoSegments = (
     let segmentStart: null | number = null;
     let segmentEnd: null | number = null;
 
+    const flush = () => {
+        if (currentSegment.length === 0) {
+            return;
+        }
+        if (segmentStart === null || segmentEnd === null) {
+            return;
+        }
+        segments.push({ end: segmentEnd, start: segmentStart, tokens: currentSegment });
+    };
+
+    const reset = () => {
+        currentSegment = [];
+        segmentStart = null;
+        segmentEnd = null;
+    };
+
+    const durationExceeded = () => {
+        if (segmentStart === null || segmentEnd === null) {
+            return false;
+        }
+        return segmentEnd - segmentStart > maxSecondsPerSegment;
+    };
+
     for (let i = 0; i < markedTokens.length; i++) {
         const token = markedTokens[i];
+        const next = markedTokens[i + 1];
+        const nextIsDivider = next === SEGMENT_BREAK || next === ALWAYS_BREAK;
 
-        // ALWAYS_BREAK is a hard boundary: it should start a new segment so the
-        // following phrase cannot be merged back into the previous one.
         if (token === ALWAYS_BREAK) {
-            if (currentSegment.length > 0 && segmentStart !== null && segmentEnd !== null) {
-                segments.push({
-                    end: segmentEnd,
-                    start: segmentStart,
-                    tokens: currentSegment,
-                });
-            }
-
+            flush();
+            reset();
             currentSegment = [ALWAYS_BREAK];
-            segmentStart = null;
-            segmentEnd = null;
             continue;
         }
 
-        if (token !== SEGMENT_BREAK && token !== ALWAYS_BREAK) {
+        if (token !== SEGMENT_BREAK) {
             if (segmentStart === null) {
                 segmentStart = token.start;
             }
@@ -137,28 +153,13 @@ export const groupMarkedTokensIntoSegments = (
 
         currentSegment.push(token);
 
-        const duration = segmentStart !== null && segmentEnd !== null ? segmentEnd - segmentStart : 0;
-        const nextIsDivider = markedTokens[i + 1] === SEGMENT_BREAK || markedTokens[i + 1] === ALWAYS_BREAK;
-
-        if (duration > maxSecondsPerSegment && nextIsDivider) {
-            segments.push({
-                end: segmentEnd!,
-                start: segmentStart!,
-                tokens: currentSegment,
-            });
-            currentSegment = [];
-            segmentStart = null;
-            segmentEnd = null;
+        if (nextIsDivider && durationExceeded()) {
+            flush();
+            reset();
         }
     }
 
-    if (currentSegment.length > 0 && segmentStart !== null && segmentEnd !== null) {
-        segments.push({
-            end: segmentEnd,
-            start: segmentStart,
-            tokens: currentSegment,
-        });
-    }
+    flush();
 
     return segments;
 };
@@ -194,6 +195,70 @@ export const mergeShortSegmentsWithPrevious = (
     return result;
 };
 
+const formatMarkedSegmentToLines = (
+    segment: MarkedSegment,
+    maxSecondsPerLine: number,
+    formatTokens?: (buffer: Token) => string,
+): string[] => {
+    const lines: string[] = [];
+    let buffer: Token[] = [];
+    let bufferStart: null | number = null;
+
+    const pushBufferAsLine = () => {
+        if (buffer.length === 0) {
+            return;
+        }
+
+        const text = buffer.map((t) => t.text).join(' ');
+        lines.push(
+            formatTokens
+                ? formatTokens({
+                      end: buffer.at(-1)!.end,
+                      start: buffer[0].start,
+                      text,
+                  })
+                : `${formatSecondsToTimestamp(buffer[0].start)}: ${text}`,
+        );
+
+        buffer = [];
+        bufferStart = null;
+    };
+
+    const shouldFlushOnSoftBreak = () => {
+        if (buffer.length === 0) {
+            return false;
+        }
+        const bufferEnd = buffer[buffer.length - 1].end;
+        const duration = bufferStart !== null ? bufferEnd - bufferStart : 0;
+        if (duration < maxSecondsPerLine) {
+            return false;
+        }
+        return isEndingWithPunctuation(buffer[buffer.length - 1].text);
+    };
+
+    for (const token of segment.tokens) {
+        if (token === ALWAYS_BREAK) {
+            pushBufferAsLine();
+            continue;
+        }
+
+        if (token === SEGMENT_BREAK) {
+            if (shouldFlushOnSoftBreak()) {
+                pushBufferAsLine();
+            }
+            continue;
+        }
+
+        if (bufferStart === null) {
+            bufferStart = token.start;
+        }
+        buffer.push(token);
+    }
+
+    pushBufferAsLine();
+    return lines;
+};
+
 /**
  * Formats segments into a timestamped transcript with timestamps at the beginning of each line.
  * Lines are split based on segment breaks and maximum line duration.
@@ -209,60 +274,9 @@ export const formatSegmentsToTimestampedTranscript = (
     maxSecondsPerLine: number,
     formatTokens?: (buffer: Token) => string,
 ): string => {
-    const lines: string[] = [];
-
-    for (const segment of segments) {
-        let buffer: Token[] = [];
-        let bufferStart: null | number = null;
-
-        const pushBufferAsLine = () => {
-            if (buffer.length > 0) {
-                const text = buffer.map((t) => t.text).join(' ');
-
-                lines.push(
-                    formatTokens
-                        ? formatTokens({
-                              end: buffer.at(-1)!.end,
-                              start: buffer[0].start,
-                              text,
-                          })
-                        : `${formatSecondsToTimestamp(buffer[0].start)}: ${text}`,
-                );
-
-                buffer = [];
-                bufferStart = null;
-            }
-        };
-
-        for (let i = 0; i < segment.tokens.length; i++) {
-            const token = segment.tokens[i];
-
-            if (token === ALWAYS_BREAK) {
-                pushBufferAsLine();
-            } else if (token === SEGMENT_BREAK) {
-                const bufferEnd = buffer.length > 0 ? buffer[buffer.length - 1].end : null;
-                const duration = bufferStart !== null && bufferEnd !== null ? bufferEnd - bufferStart : 0;
-
-                if (
-                    duration >= maxSecondsPerLine &&
-                    buffer.length > 0 &&
-                    isEndingWithPunctuation(buffer[buffer.length - 1].text)
-                ) {
-                    pushBufferAsLine();
-                }
-            } else {
-                if (bufferStart === null) {
-                    bufferStart = token.start;
-                }
-
-                buffer.push(token);
-            }
-        }
-
-        pushBufferAsLine();
-    }
-
-    return lines.join('\n');
+    return segments
+        .flatMap((segment) => formatMarkedSegmentToLines(segment, maxSecondsPerLine, formatTokens))
+        .join('\n');
 };
 
 /**
@@ -289,27 +303,36 @@ export const mapSegmentsIntoFormattedSegments = (segments: MarkedSegment[], maxS
             }
         };
 
+        const shouldFlushOnSoftBreak = () => {
+            if (!maxSecondsPerLine) {
+                return true;
+            }
+            if (buffer.length === 0) {
+                return false;
+            }
+            const bufferEnd = buffer[buffer.length - 1].end;
+            const duration = bufferStart !== null ? bufferEnd - bufferStart : 0;
+            return duration > maxSecondsPerLine;
+        };
+
         for (const token of segment.tokens) {
             if (token === ALWAYS_BREAK) {
                 pushBufferAsLine();
-            } else if (token === SEGMENT_BREAK) {
-                if (!maxSecondsPerLine) {
-                    pushBufferAsLine();
-                } else {
-                    const bufferEnd = buffer.length > 0 ? buffer[buffer.length - 1].end : null;
-                    const duration = bufferStart !== null && bufferEnd !== null ? bufferEnd - bufferStart : 0;
-                    if (duration > maxSecondsPerLine) {
-                        pushBufferAsLine();
-                    }
-                }
-            } else {
-                if (bufferStart === null) {
-                    bufferStart = token.start;
-                }
-
-                buffer.push(token);
-                flattenedTokens.push(token);
+                continue;
             }
+
+            if (token === SEGMENT_BREAK) {
+                if (shouldFlushOnSoftBreak()) {
+                    pushBufferAsLine();
+                }
+                continue;
+            }
+
+            if (bufferStart === null) {
+                bufferStart = token.start;
+            }
+            buffer.push(token);
+            flattenedTokens.push(token);
         }
 
         pushBufferAsLine();
@@ -498,9 +521,10 @@ export const splitSegment = (segment: Segment, splitTime: number): Segment[] => 
  */
 export const getFirstMatchingToken = (tokens: Token[], query: string): null | Token => {
     const hints = createHints(query);
+    const normalizedTexts = tokens.map((t) => normalizeTokenText(t.text, hints.normalization));
 
     for (let i = 0; i < tokens.length; i++) {
-        if (isHintMatched(tokens, hints, i)) {
+        if (isHintMatched(normalizedTexts, hints, i)) {
             return tokens[i];
         }
     }

@@ -1,9 +1,48 @@
 import { describe, expect, it } from 'bun:test';
 
-import { syncTokensWithGroundTruth } from './transcriptUtils';
+import type { ArabicNormalizationOptions, Hints } from '../types';
+
+import { isHintMatched, syncTokensWithGroundTruth } from './transcriptUtils';
 
 describe('transcriptUtils', () => {
+    describe('isHintMatched', () => {
+        it('returns false when no candidates exist for the token at index', () => {
+            const normalizedTokens = ['hello', 'world'];
+            const hints: Hints = { map: {}, normalization: {} as Required<ArabicNormalizationOptions> };
+            expect(isHintMatched(normalizedTokens, hints, 0)).toBeFalse();
+        });
+
+        it('returns false when a candidate phrase runs past the end of the token list', () => {
+            const normalizedTokens = ['a', 'b'];
+            const hints: Hints = { map: { a: [['a', 'b', 'c']] }, normalization: {} as Required<ArabicNormalizationOptions> };
+            expect(isHintMatched(normalizedTokens, hints, 0)).toBeFalse();
+        });
+
+        it('returns true when a candidate phrase matches', () => {
+            const normalizedTokens = ['a', 'b', 'c'];
+            const hints: Hints = { map: { a: [['a', 'b']] }, normalization: {} as Required<ArabicNormalizationOptions> };
+            expect(isHintMatched(normalizedTokens, hints, 0)).toBeTrue();
+        });
+    });
+
     describe('syncTokensWithGroundTruth', () => {
+        it('returns [] when given no tokens', () => {
+            expect(syncTokensWithGroundTruth([], 'hello world')).toEqual([]);
+        });
+
+        it('marks all tokens as unknown when ground truth is empty', () => {
+            const tokens = [
+                { end: 1, start: 0, text: 'Hello' },
+                { end: 2, start: 1, text: 'world' },
+            ];
+
+            const actual = syncTokensWithGroundTruth(tokens, '');
+            expect(actual).toEqual([
+                { end: 1, isUnknown: true, start: 0, text: 'Hello' },
+                { end: 2, isUnknown: true, start: 1, text: 'world' },
+            ]);
+        });
+
         it('should be a no-op if everything matches perfectly', () => {
             const tokens = [
                 { end: 1, start: 0, text: 'The' },
@@ -11,10 +50,7 @@ describe('transcriptUtils', () => {
                 { end: 2, start: 2, text: 'brown' },
                 { end: 4, start: 3, text: 'fox' },
             ];
-            const actual = syncTokensWithGroundTruth(
-                tokens,
-                'The quick brown fox',
-            );
+            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox');
             expect(actual).toEqual(tokens);
         });
 
@@ -29,10 +65,7 @@ describe('transcriptUtils', () => {
                 { end: 9, start: 8, text: 'last' },
                 { end: 10, start: 9, text: 'dog' },
             ];
-            const actual = syncTokensWithGroundTruth(
-                tokens,
-                'The quick brown fox jumps right over the lazy dog.',
-            );
+            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, start: 1, text: 'quick' },
@@ -65,10 +98,7 @@ describe('transcriptUtils', () => {
                 { end: 14, start: 13, text: 'lazy' },
                 { end: 15, start: 14, text: 'dog' },
             ];
-            const actual = syncTokensWithGroundTruth(
-                tokens,
-                'The quick brown fox jumps right over the lazy dog',
-            );
+            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog');
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, isUnknown: true, start: 1, text: 'uh' }, // since this token was not matched we keep it always with a fixed confidence of 0.5
@@ -101,10 +131,7 @@ describe('transcriptUtils', () => {
                 { end: 9, start: 8, text: 'lays' },
                 { end: 10, start: 9, text: 'dock' },
             ];
-            const actual = syncTokensWithGroundTruth(
-                tokens,
-                'The quick brown fox jumps right over the lazy dog.',
-            );
+            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, start: 1, text: 'quick' },
@@ -132,10 +159,7 @@ describe('transcriptUtils', () => {
                 { end: 10, start: 9, text: 'crazy' },
                 { end: 11, start: 10, text: 'dog' },
             ];
-            const actual = syncTokensWithGroundTruth(
-                tokens,
-                'The quick brown fox jumps right over the lazy dog.',
-            );
+            const actual = syncTokensWithGroundTruth(tokens, 'The quick brown fox jumps right over the lazy dog.');
             expect(actual).toEqual([
                 { end: 1, start: 0, text: 'The' },
                 { end: 2, start: 1, text: 'quick' },
@@ -164,10 +188,7 @@ describe('transcriptUtils', () => {
                 { start: 6.7, text: 'اخبرنا' },
                 { start: 7, text: 'المقبري' },
             ];
-            const actual = syncTokensWithGroundTruth(
-                tokens,
-                'أَخْبَرَنَا مَعْمَرٌ عَنِ ابْنِ أَبِي ذِئْبٍ عَنِ الْمَقْبُرِيِّ',
-            );
+            const actual = syncTokensWithGroundTruth(tokens, 'أَخْبَرَنَا مَعْمَرٌ عَنِ ابْنِ أَبِي ذِئْبٍ عَنِ الْمَقْبُرِيِّ');
             expect(actual).toEqual([
                 { start: 0, text: 'أَخْبَرَنَا' },
                 { start: 1, text: 'مَعْمَرٌ' },
@@ -799,6 +820,25 @@ describe('transcriptUtils', () => {
                     text: 'اقوم.',
                 },
             ]);
+        });
+
+        it('marks extra tokens as unknown when ground truth has only one word', () => {
+            const tokens = [
+                { end: 1, start: 0, text: 'A' },
+                { end: 2, start: 1, text: 'EXTRA' },
+            ];
+
+            const actual = syncTokensWithGroundTruth(tokens, 'A');
+            expect(actual).toEqual([
+                { end: 1, start: 0, text: 'A' },
+                { end: 2, isUnknown: true, start: 1, text: 'EXTRA' },
+            ]);
+        });
+
+        it('ignores extra ground-truth words when there is only one token (tail gt cannot be aligned)', () => {
+            const tokens = [{ end: 1, start: 0, text: 'X' }];
+            const actual = syncTokensWithGroundTruth(tokens, 'A B');
+            expect(actual).toEqual([{ end: 1, start: 0, text: 'A' }]);
         });
     });
 });

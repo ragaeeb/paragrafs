@@ -21,8 +21,15 @@ A lightweight TypeScript library designed to reconstruct paragraphs from AI tran
 - **Timestamped formatting** – produces human-friendly transcripts with optional custom formatting callbacks and automatic timestamp rendering.【F:src/transcript.ts†L212-L300】
 - **Ground-truth alignment** – synchronises AI generated tokens with human edited text, interpolating timings for missing words and removing unknown tokens when applying the ground truth.【F:src/utils/transcriptUtils.ts†L1-L226】【F:src/transcript.ts†L328-L395】
 - **Selection helpers** – exposes utilities to find tokens for string queries or cursor selections, enabling rich text editors to jump to precise timestamps.【F:src/transcript.ts†L424-L493】
-- **Utility toolkit** – includes helpers for timestamp formatting, punctuation detection (including Arabic punctuation), and hint creation for multi-word matching.【F:src/utils/textUtils.ts†L4-L73】
+- **Hint system (Arabic-first)** – robust multi-word hint matching using normalization (diacritics/punctuation tolerant), plus hard boundary insertion via `ALWAYS_BREAK`.【F:src/utils/textUtils.ts†L59-L156】【F:src/transcript.ts†L40-L121】
+- **Auto-hint generation** – mines frequent repeated phrases from `Token[]` or `Segment[]` and returns sorted hint candidates for Arabic-heavy transcripts.【F:src/utils/hints.ts†L303-L379】
+- **Utility toolkit** – includes helpers for timestamp formatting, punctuation detection (including Arabic punctuation), ground-truth tokenization, and normalization utilities.【F:src/utils/textUtils.ts†L4-L185】
 - **Bun-native toolchain** – powered by the upstream `tsdown` CLI for bundling and Biome for linting, so the same commands run locally and in CI without any custom wrappers.【F:package.json†L7-L41】【F:tsdown.config.ts†L1-L9】【F:biome.json†L1-L16】
+
+## Breaking changes (recent)
+
+- **Hints are normalized by default**: `createHints(...)` now uses Arabic-first normalization for matching and mining. If you relied on exact string matching, update your expectations and/or pass explicit normalization options.【F:src/utils/textUtils.ts†L121-L156】
+- **`ALWAYS_BREAK` is a true hard boundary**: segments/lines after an `ALWAYS_BREAK` must not be merged into previous segments.【F:src/transcript.ts†L95-L167】【F:src/transcript.ts†L173-L211】
 
 ## Installation
 
@@ -148,11 +155,56 @@ console.log(aligned.tokens);
 // with missing words interpolated where needed.
 ```
 
+### Auto-generate hint candidates (Arabic-first)
+
+Use this when you have a corpus of tokens/segments and want to discover repeated phrases like "احسن الله اليكم".
+
+```typescript
+import { createHints, generateHintsFromTokens, markTokensWithDividers } from 'paragrafs';
+
+const tokens = [
+    { start: 0, end: 1, text: 'أَحْسَنَ' },
+    { start: 1, end: 2, text: 'الله' },
+    { start: 2, end: 3, text: 'إليكم،' },
+    // ... repeated in the stream ...
+];
+
+const mined = generateHintsFromTokens(tokens, {
+    minN: 2,
+    maxN: 4,
+    minCount: 2,
+    dedupe: 'closed',
+    normalization: { normalizeAlef: true },
+});
+
+// Turn mined phrases into matching hints
+const hints = createHints({ normalizeAlef: true }, ...mined.slice(0, 25).map((h) => h.phrase));
+
+const marked = markTokensWithDividers(tokens, { fillers: [], gapThreshold: 999, hints });
+```
+
 ## Commands
 
 - `bun run build` – compiles the library with the official tsdown pipeline configured in `tsdown.config.ts`.【F:package.json†L33-L41】【F:tsdown.config.ts†L1-L9】
 - `bun run lint` – runs Biome’s formatter and linter against the repository root.【F:package.json†L33-L41】【F:biome.json†L1-L16】
-- `bun test` – executes the Bun test suite with coverage output configured in `package.json`.【F:package.json†L33-L41】
+- `bun test` – executes the Bun test suite.
+- `bun test --coverage` – runs tests with coverage reporting (useful for refactors of segmentation/matching logic).
+
+### Demo app (Svelte + Vite)
+
+This repo includes a minimal static demo app in `demo/` that exercises the major exported functions with configurable JSON/text inputs. It’s intended to be deployed to **`paragrafs.surge.sh`**.
+
+- Live demo: [paragrafs.surge.sh](https://paragrafs.surge.sh)
+
+- **Install**: `bun run demo:install`
+- **Dev**: `bun run demo:dev`
+- **Build**: `bun run demo:build`
+- **Deploy to Surge**: `bun run demo:deploy`
+
+Notes:
+
+- The demo depends on the local package via `file:..`, so `demo:build` runs `bun run build` first to ensure `dist/` exists.
+- Deploy target folder is `demo/dist`.
 
 ## API Reference
 
@@ -181,10 +233,16 @@ console.log(aligned.tokens);
 
 ### Utility functions
 
-- `createHints(...hints: string[]): Hints` – splits one or more hint strings into lookup maps keyed by the first word.【F:src/utils/textUtils.ts†L49-L73】
+- `createHints(first: ArabicNormalizationOptions | string, ...rest: string[]): Hints` – creates **normalized** hints for robust Arabic matching (diacritics/punctuation tolerant).【F:src/utils/textUtils.ts†L121-L156】
 - `formatSecondsToTimestamp(seconds: number): string` – renders numeric durations into `m:ss` or `h:mm:ss` strings.【F:src/utils/textUtils.ts†L14-L33】
 - `isEndingWithPunctuation(text: string): boolean` – checks for trailing punctuation, including Arabic variants.【F:src/utils/textUtils.ts†L4-L12】
 - `tokenizeGroundTruth(groundTruth: string): string[]` – tokenises human transcripts while attaching punctuation to the preceding word.【F:src/utils/textUtils.ts†L75-L112】
+- `normalizeTokenText(text: string, options?: ArabicNormalizationOptions): string` – Arabic-first normalization used by hint matching and hint mining.【F:src/utils/textUtils.ts†L59-L103】
+
+### Auto-hint generation
+
+- `generateHintsFromTokens(tokens: Token[], options?: GenerateHintsOptions): GeneratedHint[]` – mines frequent n-grams from a token stream and returns candidates sorted by count/length.【F:src/utils/hints.ts†L303-L331】
+- `generateHintsFromSegments(segments: Segment[], options?: GenerateHintsOptions): GeneratedHint[]` – mines frequent n-grams from segments; by default phrases do not cross segment boundaries.【F:src/utils/hints.ts†L333-L379】
 
 ### Types
 
@@ -229,7 +287,7 @@ To get started:
 3. Make your changes
 4. Run linting: `bun run lint`
 5. Build the package: `bun run build`
-6. Run tests: `bun test`
+6. Run tests: `bun test --coverage`
 7. Submit a pull request
 
 ## License

@@ -15,14 +15,7 @@ import {
     splitSegment,
     updateSegmentWithGroundTruth,
 } from './transcript';
-import type {
-    MarkAndCombineSegmentsOptions,
-    MarkedSegment,
-    MarkedToken,
-    MarkTokensWithDividersOptions,
-    Segment,
-    Token,
-} from './types';
+import type { MarkAndCombineSegmentsOptions, MarkedSegment, MarkedToken, Segment, Token } from './types';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 import { createHints } from './utils/textUtils';
 
@@ -233,6 +226,33 @@ describe('transcript', () => {
                 SEGMENT_BREAK,
             ]);
         });
+
+        it('should support normalized hints for Arabic variants (diacritics/punctuation/alef)', () => {
+            const tokens = [
+                { end: 1, start: 0, text: 'يقول' },
+                { end: 2, start: 1, text: 'أَحْسَنَ' },
+                { end: 3, start: 2, text: 'الله' },
+                { end: 4, start: 3, text: 'إليكم،' },
+                { end: 5, start: 4, text: 'ثم' },
+            ];
+
+            const hints = createHints({ normalizeAlef: true }, 'احسن الله اليكم');
+
+            const actual = markTokensWithDividers(tokens, {
+                fillers: [],
+                gapThreshold: 999,
+                hints,
+            });
+
+            expect(actual).toEqual([
+                { end: 1, start: 0, text: 'يقول' },
+                ALWAYS_BREAK,
+                { end: 2, start: 1, text: 'أَحْسَنَ' },
+                { end: 3, start: 2, text: 'الله' },
+                { end: 4, start: 3, text: 'إليكم،' },
+                { end: 5, start: 4, text: 'ثم' },
+            ]);
+        });
     });
 
     describe('groupMarkedTokensIntoSegments', () => {
@@ -288,6 +308,11 @@ describe('transcript', () => {
                     ],
                 },
             ]);
+        });
+
+        it('should return [] when the input only contains markers (no timed tokens)', () => {
+            const actual = groupMarkedTokensIntoSegments([SEGMENT_BREAK, SEGMENT_BREAK] as MarkedToken[], 10);
+            expect(actual).toEqual([]);
         });
     });
 
@@ -984,6 +1009,32 @@ describe('transcript', () => {
                         { end: 1, start: 0, text: 'Hello' },
                         { end: 2, start: 1, text: 'world.' },
                     ],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 10);
+            expect(result).toEqual('0:00: Hello world.');
+        });
+
+        it('ignores leading SEGMENT_BREAK markers (does not flush an empty buffer)', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 2,
+                    start: 0,
+                    tokens: [SEGMENT_BREAK, { end: 2, start: 0, text: 'Hello.' }],
+                },
+            ];
+
+            const result = formatSegmentsToTimestampedTranscript(segments, 999);
+            expect(result).toEqual('0:00: Hello.');
+        });
+
+        it('does not flush on SEGMENT_BREAK if the buffer duration is below maxSecondsPerLine', () => {
+            const segments: MarkedSegment[] = [
+                {
+                    end: 2,
+                    start: 0,
+                    tokens: [{ end: 1, start: 0, text: 'Hello' }, SEGMENT_BREAK, { end: 2, start: 1, text: 'world.' }],
                 },
             ];
 

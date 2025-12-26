@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import {
     formatSecondsToTimestamp,
     isEndingWithPunctuation,
+    normalizeTokenText,
     normalizeWord,
     tokenizeGroundTruth,
 } from './textUtils';
@@ -105,6 +106,24 @@ describe('textUtils', () => {
         });
     });
 
+    describe('normalizeTokenText', () => {
+        it('should remove tatweel when configured', () => {
+            expect(normalizeTokenText('اللــــه', { removeTatweel: true })).toBe('الله');
+        });
+
+        it('should normalize alef variants when configured', () => {
+            expect(normalizeTokenText('إليكم', { normalizeAlef: true })).toBe('اليكم');
+        });
+
+        it('should normalize ya variants when configured', () => {
+            expect(normalizeTokenText('على', { normalizeYa: true })).toBe('علي');
+        });
+
+        it('should normalize hamza seats when configured', () => {
+            expect(normalizeTokenText('سُئِلَ', { normalizeHamza: true })).toBe('سءل');
+        });
+    });
+
     describe('tokenizeGroundTruth', () => {
         it('should return empty array for empty string', () => {
             const result = tokenizeGroundTruth('');
@@ -197,8 +216,7 @@ describe('textUtils', () => {
         });
 
         it('should handle complex Arabic text from the original test', () => {
-            const text =
-                'محمد وعلى آله وصحبه أجمعين ومن تبعهم بإحسان إلى يوم الدين ؛';
+            const text = 'محمد وعلى آله وصحبه أجمعين ومن تبعهم بإحسان إلى يوم الدين ؛';
             const result = tokenizeGroundTruth(text);
             expect(result).toEqual([
                 'محمد',
