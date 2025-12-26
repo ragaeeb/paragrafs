@@ -1,4 +1,4 @@
-import type { Hints } from '../types';
+import type { ArabicNormalizationOptions, HintMap, Hints } from '../types';
 
 /**
  * Checks if a text string ends with a punctuation mark (period, question mark, exclamation mark).
@@ -7,8 +7,7 @@ import type { Hints } from '../types';
  * @param {string} text - The text to check for ending punctuation
  * @returns {boolean} True if the text ends with punctuation, false otherwise
  */
-export const isEndingWithPunctuation = (text: string): boolean =>
-    /[.؟!?]$/.test(text);
+export const isEndingWithPunctuation = (text: string): boolean => /[.؟!?؛…]$/.test(text);
 
 /**
  * Formats seconds into a human-readable timestamp.
@@ -45,14 +44,62 @@ export const normalizeWord = (w: string) => {
         w
             // Decompose to strip diacritics
             .normalize('NFD')
+            // Remove common zero-width / format characters that can sneak into Arabic text.
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
             // Remove Arabic diacritic marks and other common combining marks
             .replace(/\p{Mn}/gu, '')
             .replace(/[\u064B-\u065F]/g, '')
-            // Strip any punctuation or symbol at start/end (Unicode property escapes)
-            .replace(/^[\p{P}\p{S}]+|[\p{P}\p{S}]+$/gu, '')
+            // Strip any punctuation, symbol, or format char at start/end (Unicode property escapes)
+            .replace(/^[\p{P}\p{S}\p{Cf}]+|[\p{P}\p{S}\p{Cf}]+$/gu, '')
             // Recompose
             .normalize('NFC')
     );
+};
+
+/**
+ * Normalizes token text for Arabic-first matching and mining.
+ *
+ * This builds on `normalizeWord` (diacritics + trim punctuation) and adds optional
+ * Arabic-specific normalizations. Use the same normalization for:
+ * - mining repeated sequences
+ * - matching hints against tokens
+ *
+ * @param text The token text to normalize
+ * @param options Optional Arabic-specific normalizations
+ * @returns A normalized token string suitable for comparisons
+ */
+export const normalizeTokenText = (text: string, options?: ArabicNormalizationOptions): string => {
+    let input = text;
+
+    // Preserve hamza information before we strip combining marks.
+    // In NFD, ؤ/ئ decompose into base letter + U+0654 (hamza above).
+    // We collapse waw/ya hamza seats to a standalone hamza, while leaving alef hamza
+    // to be handled by normalizeAlef (or dropped if normalizeAlef is enabled).
+    if (options?.normalizeHamza) {
+        input = input
+            .normalize('NFD')
+            // ya/waw seats can have additional vowel marks between the base letter and hamza above in NFD.
+            .replace(/\u064A\p{Mn}*\u0654/gu, 'ء') // ي + Mn* + ٔ
+            .replace(/\u0648\p{Mn}*\u0654/gu, 'ء') // و + Mn* + ٔ
+            .replace(/[\u0654\u0655]/g, '') // drop remaining hamza combining marks (e.g., أ/إ)
+            .normalize('NFC');
+    }
+
+    let normalized = normalizeWord(input);
+
+    if (options?.removeTatweel) {
+        normalized = normalized.replace(/\u0640/g, '');
+    }
+
+    if (options?.normalizeAlef) {
+        normalized = normalized.replace(/[أإآ]/g, 'ا');
+    }
+
+    if (options?.normalizeYa) {
+        normalized = normalized.replace(/ى/g, 'ي');
+    }
+
+    return normalized;
 };
 
 /**
@@ -64,19 +111,48 @@ export const normalizeWord = (w: string) => {
  * @param {...string} hints - One or more hint strings to process
  * @returns {Hints} A map of hints organized by their first word
  */
-export const createHints = (...hints: string[]) => {
-    const hintMap: Hints = {};
+const DEFAULT_HINT_NORMALIZATION: Required<ArabicNormalizationOptions> = {
+    normalizeAlef: true,
+    normalizeHamza: false,
+    normalizeYa: true,
+    removeTatweel: true,
+};
+
+/**
+ * Creates normalized hints for robust Arabic matching (diacritics/punctuation tolerant).
+ *
+ * Breaking change: hints are now normalized by default. This is intended for Arabic ASR.
+ *
+ * @param first Either the first hint string, or an options object overriding the default normalization.
+ * @param restHints Remaining hint strings, if the first argument was an options object.
+ * @returns A normalized hint map plus the normalization settings used for matching.
+ */
+export const createHints = (first: ArabicNormalizationOptions | string, ...restHints: string[]): Hints => {
+    const map: HintMap = {};
+
+    const [options, hints] =
+        typeof first === 'string'
+            ? [DEFAULT_HINT_NORMALIZATION, [first, ...restHints]]
+            : [{ ...DEFAULT_HINT_NORMALIZATION, ...first }, restHints];
+
     for (const hint of hints) {
-        const words = hint.split(' ');
-        const first = words[0];
-        if (!hintMap[first]) {
-            hintMap[first] = [];
+        const words = hint
+            .split(/\s+/)
+            .map((w) => normalizeTokenText(w, options))
+            .filter(Boolean);
+
+        if (words.length === 0) {
+            continue;
         }
 
-        hintMap[first].push(words);
+        const firstWord = words[0];
+        if (!map[firstWord]) {
+            map[firstWord] = [];
+        }
+        map[firstWord].push(words);
     }
 
-    return hintMap;
+    return { map, normalization: options };
 };
 
 /**

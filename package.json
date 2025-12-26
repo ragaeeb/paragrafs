@@ -43,6 +43,11 @@
     },
     "scripts": {
         "build": "tsdown",
+        "demo:build": "bun run build && cd demo && bun run build",
+        "demo:deploy": "bun run demo:build && surge demo/dist paragrafs.surge.sh",
+        "demo:dev": "bun run build && cd demo && bun run dev",
+        "demo:install": "cd demo && bun install",
+        "demo:preview": "cd demo && bun run preview",
         "lint": "biome check ."
     },
     "source": "src/index.ts",

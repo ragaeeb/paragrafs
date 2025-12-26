@@ -12,19 +12,14 @@ type LCSTable = number[][];
 export const buildLcsTable = (a: string[], b: string[]) => {
     const m = a.length;
     const n = b.length;
-    const table: LCSTable = Array.from({ length: m + 1 }, () =>
-        Array(n + 1).fill(0),
-    );
+    const table: LCSTable = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
 
     for (let i = 0; i < m; i++) {
         for (let j = 0; j < n; j++) {
             if (a[i] === b[j]) {
                 table[i + 1][j + 1] = table[i][j] + 1;
             } else {
-                table[i + 1][j + 1] = Math.max(
-                    table[i][j + 1],
-                    table[i + 1][j],
-                );
+                table[i + 1][j + 1] = Math.max(table[i][j + 1], table[i + 1][j]);
             }
         }
     }
@@ -42,11 +37,7 @@ export const buildLcsTable = (a: string[], b: string[]) => {
  * @param ground - Normalized ground truth words
  * @returns Array of match objects with `gtIndex` and `origIndex` pairs
  */
-export const extractLcsMatches = (
-    table: LCSTable,
-    original: string[],
-    ground: string[],
-) => {
+export const extractLcsMatches = (table: LCSTable, original: string[], ground: string[]) => {
     const matches = new Map<number, number>();
     let i = original.length;
     let j = ground.length;

@@ -41,27 +41,31 @@ import { normalizeWord, tokenizeGroundTruth } from './textUtils';
  * // → false (no hint starts with 'over')
  * ```
  */
-export const isHintMatched = (tokens: Token[], hints: Hints, index: number) => {
-    const token = tokens[index];
-    const candidates = hints[token.text];
+const isHintSequenceMatchedAtIndex = (normalizedTokens: string[], words: string[], index: number): boolean => {
+    if (index + words.length > normalizedTokens.length) {
+        return false;
+    }
 
-    if (candidates) {
-        for (const words of candidates) {
-            const len = words.length;
+    for (let k = 0; k < words.length; k++) {
+        if (normalizedTokens[index + k] !== words[k]) {
+            return false;
+        }
+    }
 
-            if (index + len <= tokens.length) {
-                let match = true;
+    return true;
+};
 
-                for (let k = 0; k < len; k++) {
-                    if (tokens[index + k].text !== words[k]) {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) {
-                    return true;
-                }
-            }
+export const isHintMatched = (normalizedTokens: string[], hints: Hints, index: number) => {
+    const key = normalizedTokens[index];
+    const candidates = hints.map[key];
+
+    if (!candidates) {
+        return false;
+    }
+
+    for (const words of candidates) {
+        if (isHintSequenceMatchedAtIndex(normalizedTokens, words, index)) {
+            return true;
         }
     }
 
@@ -95,13 +99,7 @@ type CreateInsertionTokenProps = {
  */
 const createInsertionToken = (
     text: string,
-    {
-        gtGap,
-        gtGapIndex,
-        nextToken,
-        prevToken,
-        tokenGap,
-    }: CreateInsertionTokenProps,
+    { gtGap, gtGapIndex, nextToken, prevToken, tokenGap }: CreateInsertionTokenProps,
 ): Token => {
     const gapStartTime = prevToken?.end ?? 0;
     const gapEndTime = nextToken.start;
@@ -124,19 +122,12 @@ const createInsertionToken = (
  * between the token and ground truth sequences.
  * @returns An array of [tokenIndex, gtIndex] pairs.
  */
-const findAnchors = (
-    tokens: Token[],
-    groundTruthWords: string[],
-): [number, number][] => {
+const findAnchors = (tokens: Token[], groundTruthWords: string[]): [number, number][] => {
     const normalizedTokens = tokens.map((t) => normalizeWord(t.text));
     const normalizedGTWords = groundTruthWords.map(normalizeWord);
 
     const lcsTable = buildLcsTable(normalizedTokens, normalizedGTWords);
-    const lcsMatches = extractLcsMatches(
-        lcsTable,
-        normalizedTokens,
-        normalizedGTWords,
-    );
+    const lcsMatches = extractLcsMatches(lcsTable, normalizedTokens, normalizedGTWords);
 
     // Enforce hard constraints for first and last tokens.
     lcsMatches.set(0, 0);
@@ -167,6 +158,16 @@ const processGaps = (
     let lastTokenIndex = -1;
     let lastGtIndex = -1;
 
+    const pushInsertion = (gtGap: string[], gtGapIndex: number, tokenGap: Token[], currentTokenIndex: number) => {
+        return createInsertionToken(gtGap[gtGapIndex], {
+            gtGap,
+            gtGapIndex,
+            nextToken: tokens[currentTokenIndex],
+            prevToken: lastTokenIndex === -1 ? null : tokens[lastTokenIndex],
+            tokenGap,
+        });
+    };
+
     for (const [currentTokenIndex, currentGtIndex] of anchors) {
         const tokenGap = tokens.slice(lastTokenIndex + 1, currentTokenIndex);
         const gtGap = groundTruthWords.slice(lastGtIndex + 1, currentGtIndex);
@@ -175,28 +176,21 @@ const processGaps = (
         let gtGapIndex = 0;
 
         while (tokenGapIndex < tokenGap.length || gtGapIndex < gtGap.length) {
-            if (tokenGapIndex < tokenGap.length && gtGapIndex < gtGap.length) {
-                result.push({
-                    ...tokenGap[tokenGapIndex],
-                    text: gtGap[gtGapIndex],
-                });
-                tokenGapIndex++;
+            if (tokenGapIndex >= tokenGap.length) {
+                result.push(pushInsertion(gtGap, gtGapIndex, tokenGap, currentTokenIndex));
                 gtGapIndex++;
-            } else if (tokenGapIndex < tokenGap.length) {
+                continue;
+            }
+
+            if (gtGapIndex >= gtGap.length) {
                 result.push({ ...tokenGap[tokenGapIndex], isUnknown: true });
                 tokenGapIndex++;
-            } else {
-                const insertion = createInsertionToken(gtGap[gtGapIndex], {
-                    gtGap,
-                    gtGapIndex,
-                    nextToken: tokens[currentTokenIndex],
-                    prevToken:
-                        lastTokenIndex === -1 ? null : tokens[lastTokenIndex],
-                    tokenGap,
-                });
-                result.push(insertion);
-                gtGapIndex++;
+                continue;
             }
+
+            result.push({ ...tokenGap[tokenGapIndex], text: gtGap[gtGapIndex] });
+            tokenGapIndex++;
+            gtGapIndex++;
         }
 
         result.push({
@@ -224,24 +218,16 @@ const processFinalTail = (
 ): void => {
     const finalTokenGap = tokens.slice(lastTokenIndex + 1);
     const finalGtGap = groundTruthWords.slice(lastGtIndex + 1);
-    let tokenIdx = 0;
-    let gtIdx = 0;
 
-    while (tokenIdx < finalTokenGap.length || gtIdx < finalGtGap.length) {
-        if (tokenIdx < finalTokenGap.length && gtIdx < finalGtGap.length) {
-            result.push({
-                ...finalTokenGap[tokenIdx],
-                text: finalGtGap[gtIdx],
-            });
-            tokenIdx++;
-            gtIdx++;
-        } else if (tokenIdx < finalTokenGap.length) {
-            result.push({ ...finalTokenGap[tokenIdx], isUnknown: true });
-            tokenIdx++;
-        } else {
-            // This case is logically impossible if the last words are anchored.
-            break;
-        }
+    // With enforced first/last anchors (when both sequences have length > 1), we should
+    // not have any remaining ground-truth words after the last anchor. The only realistic
+    // tail we can handle is extra tokens (mark as unknown).
+    if (finalGtGap.length > 0) {
+        return;
+    }
+
+    for (const token of finalTokenGap) {
+        result.push({ ...token, isUnknown: true });
     }
 };
 
@@ -254,11 +240,10 @@ const processFinalTail = (
  * @param groundTruth The human-agent verified text for the transcription.
  * @returns The corrected tokens with a best-effort of the ground truth values applied.
  */
-export const syncTokensWithGroundTruth = (
-    tokens: Token[],
-    groundTruth: string,
-): GroundedToken[] => {
-    if (tokens.length === 0) return [];
+export const syncTokensWithGroundTruth = (tokens: Token[], groundTruth: string): GroundedToken[] => {
+    if (tokens.length === 0) {
+        return [];
+    }
 
     const groundTruthWords = tokenizeGroundTruth(groundTruth);
     if (groundTruthWords.length === 0) {
@@ -269,20 +254,10 @@ export const syncTokensWithGroundTruth = (
     const anchors = findAnchors(tokens, groundTruthWords);
 
     // 2. Process the segments between the anchors.
-    const { lastGtIndex, lastTokenIndex, result } = processGaps(
-        tokens,
-        groundTruthWords,
-        anchors,
-    );
+    const { lastGtIndex, lastTokenIndex, result } = processGaps(tokens, groundTruthWords, anchors);
 
     // 3. Process any remaining tokens after the last anchor.
-    processFinalTail(
-        result,
-        tokens,
-        groundTruthWords,
-        lastTokenIndex,
-        lastGtIndex,
-    );
+    processFinalTail(result, tokens, groundTruthWords, lastTokenIndex, lastGtIndex);
 
     return result;
 };

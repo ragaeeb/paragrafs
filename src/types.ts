@@ -15,7 +15,39 @@ export type GroundedToken = Token & {
     isUnknown?: boolean;
 };
 
-export type Hints = Record<string, string[][]>;
+export type HintMap = Record<string, string[][]>;
+
+export type ArabicNormalizationOptions = {
+    normalizeAlef?: boolean;
+    normalizeHamza?: boolean;
+    normalizeYa?: boolean;
+    removeTatweel?: boolean;
+};
+
+export type GenerateHintsOptions = {
+    boundaryStrategy?: 'none' | 'segment';
+    dedupe?: 'closed' | 'none';
+    maxN?: number;
+    minCount?: number;
+    minN?: number;
+    normalization?: ArabicNormalizationOptions;
+    stopwords?: string[];
+    topK?: number;
+};
+
+export type Hints = {
+    map: HintMap;
+    normalization: Required<ArabicNormalizationOptions>;
+};
+
+export type GeneratedHint = {
+    count: number;
+    firstOccurrenceIndex?: number;
+    length: number;
+    normalizedPhrase: string;
+    phrase: string;
+    topSurfaceForms?: string[];
+};
 
 /**
  * Represents a segment during the marking and processing stage.

@@ -50,9 +50,7 @@ describe('lcs', () => {
                 [1, 1],
                 [2, 2],
             ]);
-            expect([...matches.entries()].sort()).toEqual(
-                [...expected.entries()].sort(),
-            );
+            expect([...matches.entries()].sort()).toEqual([...expected.entries()].sort());
         });
     });
 });

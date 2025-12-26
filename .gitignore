@@ -22,3 +22,8 @@ coverage
 .flaskenv*
 !.env.project
 !.env.vault
+
+# demo app
+/demo/node_modules
+/demo/dist
+/demo/.vite
