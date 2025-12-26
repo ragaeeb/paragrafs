@@ -53,5 +53,5 @@
     "source": "src/index.ts",
     "type": "module",
     "types": "dist/index.d.mts",
-    "version": "1.5.2"
+    "version": "1.6.0"
 }
