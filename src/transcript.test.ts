@@ -15,7 +15,14 @@ import {
     splitSegment,
     updateSegmentWithGroundTruth,
 } from './transcript';
-import type { MarkedSegment, MarkedToken, Segment, Token } from './types';
+import type {
+    MarkAndCombineSegmentsOptions,
+    MarkedSegment,
+    MarkedToken,
+    MarkTokensWithDividersOptions,
+    Segment,
+    Token,
+} from './types';
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
 import { createHints } from './utils/textUtils';
 
@@ -393,11 +400,7 @@ describe('transcript', () => {
                 {
                     end: 19,
                     start: 16,
-                    tokens: [
-                        { end: 17, start: 16, text: 'lazy' },
-                        { end: 19, start: 18, text: 'dog.' },
-                        SEGMENT_BREAK,
-                    ],
+                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
                 },
             ] as MarkedSegment[];
 
@@ -455,11 +458,7 @@ describe('transcript', () => {
                 {
                     end: 19,
                     start: 16,
-                    tokens: [
-                        { end: 17, start: 16, text: 'lazy' },
-                        { end: 19, start: 18, text: 'dog.' },
-                        SEGMENT_BREAK,
-                    ],
+                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
                 },
             ] as MarkedSegment[];
 
@@ -515,11 +514,7 @@ describe('transcript', () => {
                 {
                     end: 19,
                     start: 16,
-                    tokens: [
-                        { end: 17, start: 16, text: 'lazy' },
-                        { end: 19, start: 18, text: 'dog.' },
-                        SEGMENT_BREAK,
-                    ],
+                    tokens: [{ end: 17, start: 16, text: 'lazy' }, { end: 19, start: 18, text: 'dog.' }, SEGMENT_BREAK],
                 },
             ] as MarkedSegment[];
 
@@ -552,15 +547,62 @@ describe('transcript', () => {
                 },
             ]);
         });
+
+        it('should preserve ALWAYS_BREAK as a hard segment boundary (e.g. "احسن الله اليكم" starts a new segment)', () => {
+            const markedTokens: MarkedToken[] = [
+                { end: 1, start: 0, text: 'قبل' },
+                { end: 2, start: 1, text: 'ذلك' },
+                SEGMENT_BREAK,
+                ALWAYS_BREAK,
+                SEGMENT_BREAK,
+                { end: 3, start: 2, text: 'احسن' },
+                { end: 4, start: 3, text: 'الله' },
+                { end: 5, start: 4, text: 'اليكم' },
+                { end: 6, start: 5, text: 'هذا' },
+            ];
+
+            const grouped = groupMarkedTokensIntoSegments(markedTokens, 10_000);
+            // Ensure ALWAYS_BREAK becomes its own segment boundary and isn't merged away.
+            const combined = mergeShortSegmentsWithPrevious(grouped, 999);
+
+            const actual = mapSegmentsIntoFormattedSegments(combined, 30);
+
+            expect(actual).toEqual([
+                {
+                    end: 2,
+                    start: 0,
+                    text: 'قبل ذلك',
+                    tokens: [
+                        { end: 1, start: 0, text: 'قبل' },
+                        { end: 2, start: 1, text: 'ذلك' },
+                    ],
+                },
+                {
+                    end: 6,
+                    start: 2,
+                    text: 'احسن الله اليكم هذا',
+                    tokens: [
+                        { end: 3, start: 2, text: 'احسن' },
+                        { end: 4, start: 3, text: 'الله' },
+                        { end: 5, start: 4, text: 'اليكم' },
+                        { end: 6, start: 5, text: 'هذا' },
+                    ],
+                },
+            ]);
+        });
     });
 
     describe('markAndCombineSegments', () => {
-        const options = {
-            fillers: ['uh', 'umm', 'hmmm'],
-            gapThreshold: 1.5,
-            maxSecondsPerSegment: 10,
-            minWordsPerSegment: 3,
-        };
+        let options: MarkAndCombineSegmentsOptions;
+
+        beforeEach(() => {
+            options = {
+                fillers: ['uh', 'umm', 'hmmm'],
+                gapThreshold: 1.5,
+                maxSecondsPerSegment: 10,
+                minWordsPerSegment: 3,
+            };
+        });
 
         it('should process segments with fillers but collapse to prevent isolated tokens', () => {
             const segments: Segment[] = [
@@ -669,11 +711,17 @@ describe('transcript', () => {
 
             expect(result).toEqual([
                 {
-                    end: 10,
+                    end: 2,
                     start: 0,
                     tokens: [
                         { end: 1, start: 0, text: 'The' },
                         { end: 2, start: 1.5, text: 'quick' },
+                    ],
+                },
+                {
+                    end: 10,
+                    start: 2,
+                    tokens: [
                         ALWAYS_BREAK,
                         { end: 3, start: 2, text: 'Fox' },
                         { end: 4, start: 3, text: 'jumps' },
@@ -705,9 +753,7 @@ describe('transcript', () => {
             const result = markAndCombineSegments(segments, options);
 
             // Should have a segment break due to the gap
-            const segmentBreakCount = result[0].tokens.filter(
-                (t) => t === SEGMENT_BREAK,
-            ).length;
+            const segmentBreakCount = result[0].tokens.filter((t) => t === SEGMENT_BREAK).length;
             expect(segmentBreakCount).toBeGreaterThan(0);
         });
 
@@ -774,9 +820,7 @@ describe('transcript', () => {
 
             // Verify that "Too short" was merged with the previous segment
             const allTokenTexts = result.flatMap((segment) =>
-                segment.tokens
-                    .filter((token): token is Token => token !== SEGMENT_BREAK)
-                    .map((token) => token.text),
+                segment.tokens.filter((token): token is Token => token !== SEGMENT_BREAK).map((token) => token.text),
             );
 
             expect(allTokenTexts).toContain('Too');
@@ -808,11 +852,7 @@ describe('transcript', () => {
             // Find if there's a SEGMENT_BREAK right after "sentence."
             const hasPunctuationBreak = segmentBreakIndexes.some((index) => {
                 const prevToken = result[0].tokens[index - 1];
-                return (
-                    prevToken !== SEGMENT_BREAK &&
-                    typeof prevToken !== 'string' &&
-                    prevToken.text === 'sentence.'
-                );
+                return prevToken !== SEGMENT_BREAK && typeof prevToken !== 'string' && prevToken.text === 'sentence.';
             });
 
             expect(hasPunctuationBreak).toBeTrue();
@@ -927,11 +967,7 @@ describe('transcript', () => {
 
             const hasPunctuationBreak = segmentBreakIndexes.some((index) => {
                 const prevToken = result[0].tokens[index - 1];
-                return (
-                    prevToken !== SEGMENT_BREAK &&
-                    typeof prevToken !== 'string' &&
-                    prevToken.text === 'بالعالم؟'
-                );
+                return prevToken !== SEGMENT_BREAK && typeof prevToken !== 'string' && prevToken.text === 'بالعالم؟';
             });
 
             expect(hasPunctuationBreak).toBeTrue();
@@ -971,9 +1007,7 @@ describe('transcript', () => {
             ];
 
             const result = formatSegmentsToTimestampedTranscript(segments, 5);
-            expect(result).toEqual(
-                ['0:00: Hello there.', '0:06: How are you?'].join('\n'),
-            );
+            expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
         });
 
         it('should always create a new segment when encountering a always break token', () => {
@@ -992,9 +1026,7 @@ describe('transcript', () => {
             ];
 
             const result = formatSegmentsToTimestampedTranscript(segments, 100);
-            expect(result).toEqual(
-                ['0:00: Hello there.', '0:06: How are you?'].join('\n'),
-            );
+            expect(result).toEqual(['0:00: Hello there.', '0:06: How are you?'].join('\n'));
         });
 
         it('does not break long sentences if no punctuation is present', () => {
@@ -1027,13 +1059,9 @@ describe('transcript', () => {
                 },
             ];
 
-            const result = formatSegmentsToTimestampedTranscript(
-                segments,
-                10,
-                (buffer) => {
-                    return `> [${buffer.start}s]: ${buffer.text.toUpperCase()}`;
-                },
-            );
+            const result = formatSegmentsToTimestampedTranscript(segments, 10, (buffer) => {
+                return `> [${buffer.start}s]: ${buffer.text.toUpperCase()}`;
+            });
 
             expect(result).toEqual('> [0s]: TESTING FORMATTER.');
         });
@@ -1090,10 +1118,7 @@ describe('transcript', () => {
                 },
             ];
 
-            const actual = updateSegmentWithGroundTruth(
-                { end: 6, start: 0, text: '', tokens },
-                'The quick brown fox',
-            );
+            const actual = updateSegmentWithGroundTruth({ end: 6, start: 0, text: '', tokens }, 'The quick brown fox');
             expect(actual.tokens).toEqual(tokens);
         });
 
@@ -1230,10 +1255,7 @@ describe('transcript', () => {
                     { end: 10, start: 9, text: 'dog' },
                 ],
             };
-            const actual = updateSegmentWithGroundTruth(
-                segment,
-                'The quick brown fox jumps right over the lazy dog.',
-            );
+            const actual = updateSegmentWithGroundTruth(segment, 'The quick brown fox jumps right over the lazy dog.');
             const got = roundTokenTimes(actual.tokens);
 
             expect(got).toEqual([
@@ -1304,10 +1326,7 @@ describe('transcript', () => {
                 ],
             };
 
-            const result = applyGroundTruthToSegment(
-                segment,
-                'A polished transcript',
-            );
+            const result = applyGroundTruthToSegment(segment, 'A polished transcript');
 
             expect(result).toEqual({
                 end: 6,
@@ -1320,13 +1339,10 @@ describe('transcript', () => {
                 ],
             });
 
-            const tokenHasUnknownFlag = (
-                token: Token,
-            ): token is Token & { isUnknown?: boolean } => 'isUnknown' in token;
+            const tokenHasUnknownFlag = (token: Token): token is Token & { isUnknown?: boolean } =>
+                'isUnknown' in token;
 
-            expect(
-                result.tokens.every((token) => !tokenHasUnknownFlag(token)),
-            ).toBeTrue();
+            expect(result.tokens.every((token) => !tokenHasUnknownFlag(token))).toBeTrue();
         });
     });
 

@@ -1,5 +1,6 @@
 import type {
     GroundedSegment,
+    MarkAndCombineSegmentsOptions,
     MarkedSegment,
     MarkedToken,
     MarkTokensWithDividersOptions,
@@ -8,15 +9,8 @@ import type {
 } from './types';
 
 import { ALWAYS_BREAK, SEGMENT_BREAK } from './utils/constants';
-import {
-    createHints,
-    formatSecondsToTimestamp,
-    isEndingWithPunctuation,
-} from './utils/textUtils';
-import {
-    isHintMatched,
-    syncTokensWithGroundTruth,
-} from './utils/transcriptUtils';
+import { createHints, formatSecondsToTimestamp, isEndingWithPunctuation } from './utils/textUtils';
+import { isHintMatched, syncTokensWithGroundTruth } from './utils/transcriptUtils';
 
 /**
  * Estimates a segment with word-level tokens from a single token with multi-word text.
@@ -28,11 +22,7 @@ import {
  * @param {string} param0.text - The multi-word text content
  * @returns {Segment} A segment with the original text and estimated word-level tokens
  */
-export const estimateSegmentFromToken = ({
-    end,
-    start,
-    text,
-}: Token): Segment => {
+export const estimateSegmentFromToken = ({ end, start, text }: Token): Segment => {
     const words = text.split(/\s+/);
     const totalTokens = words.length;
     const segmentDuration = end - start;
@@ -120,6 +110,23 @@ export const groupMarkedTokensIntoSegments = (
     for (let i = 0; i < markedTokens.length; i++) {
         const token = markedTokens[i];
 
+        // ALWAYS_BREAK is a hard boundary: it should start a new segment so the
+        // following phrase cannot be merged back into the previous one.
+        if (token === ALWAYS_BREAK) {
+            if (currentSegment.length > 0 && segmentStart !== null && segmentEnd !== null) {
+                segments.push({
+                    end: segmentEnd,
+                    start: segmentStart,
+                    tokens: currentSegment,
+                });
+            }
+
+            currentSegment = [ALWAYS_BREAK];
+            segmentStart = null;
+            segmentEnd = null;
+            continue;
+        }
+
         if (token !== SEGMENT_BREAK && token !== ALWAYS_BREAK) {
             if (segmentStart === null) {
                 segmentStart = token.start;
@@ -130,13 +137,8 @@ export const groupMarkedTokensIntoSegments = (
 
         currentSegment.push(token);
 
-        const duration =
-            segmentStart !== null && segmentEnd !== null
-                ? segmentEnd - segmentStart
-                : 0;
-        const nextIsDivider =
-            markedTokens[i + 1] === SEGMENT_BREAK ||
-            markedTokens[i + 1] === ALWAYS_BREAK;
+        const duration = segmentStart !== null && segmentEnd !== null ? segmentEnd - segmentStart : 0;
+        const nextIsDivider = markedTokens[i + 1] === SEGMENT_BREAK || markedTokens[i + 1] === ALWAYS_BREAK;
 
         if (duration > maxSecondsPerSegment && nextIsDivider) {
             segments.push({
@@ -150,11 +152,7 @@ export const groupMarkedTokensIntoSegments = (
         }
     }
 
-    if (
-        currentSegment.length > 0 &&
-        segmentStart !== null &&
-        segmentEnd !== null
-    ) {
+    if (currentSegment.length > 0 && segmentStart !== null && segmentEnd !== null) {
         segments.push({
             end: segmentEnd,
             start: segmentStart,
@@ -180,11 +178,11 @@ export const mergeShortSegmentsWithPrevious = (
     const result: MarkedSegment[] = [];
 
     for (const segment of segments) {
-        const wordTokens = segment.tokens.filter(
-            (t) => t !== SEGMENT_BREAK && t !== ALWAYS_BREAK,
-        );
+        const wordTokens = segment.tokens.filter((t) => t !== SEGMENT_BREAK && t !== ALWAYS_BREAK);
 
-        if (wordTokens.length < minWordsPerSegment && result.length > 0) {
+        const isHardBoundary = segment.tokens.includes(ALWAYS_BREAK);
+
+        if (!isHardBoundary && wordTokens.length < minWordsPerSegment && result.length > 0) {
             const prev = result[result.length - 1];
             prev.tokens.push(...segment.tokens);
             prev.end = segment.end;
@@ -242,12 +240,8 @@ export const formatSegmentsToTimestampedTranscript = (
             if (token === ALWAYS_BREAK) {
                 pushBufferAsLine();
             } else if (token === SEGMENT_BREAK) {
-                const bufferEnd =
-                    buffer.length > 0 ? buffer[buffer.length - 1].end : null;
-                const duration =
-                    bufferStart !== null && bufferEnd !== null
-                        ? bufferEnd - bufferStart
-                        : 0;
+                const bufferEnd = buffer.length > 0 ? buffer[buffer.length - 1].end : null;
+                const duration = bufferStart !== null && bufferEnd !== null ? bufferEnd - bufferStart : 0;
 
                 if (
                     duration >= maxSecondsPerLine &&
@@ -280,10 +274,7 @@ export const formatSegmentsToTimestampedTranscript = (
  * @param {number} [maxSecondsPerLine] - Optional maximum duration (in seconds) for a single line
  * @returns {Segment[]} Array of formatted segments with clean text
  */
-export const mapSegmentsIntoFormattedSegments = (
-    segments: MarkedSegment[],
-    maxSecondsPerLine?: number,
-): Segment[] => {
+export const mapSegmentsIntoFormattedSegments = (segments: MarkedSegment[], maxSecondsPerLine?: number): Segment[] => {
     return segments.map((segment) => {
         const textParts: string[] = [];
         const flattenedTokens: Token[] = [];
@@ -305,14 +296,8 @@ export const mapSegmentsIntoFormattedSegments = (
                 if (!maxSecondsPerLine) {
                     pushBufferAsLine();
                 } else {
-                    const bufferEnd =
-                        buffer.length > 0
-                            ? buffer[buffer.length - 1].end
-                            : null;
-                    const duration =
-                        bufferStart !== null && bufferEnd !== null
-                            ? bufferEnd - bufferStart
-                            : 0;
+                    const bufferEnd = buffer.length > 0 ? buffer[buffer.length - 1].end : null;
+                    const duration = bufferStart !== null && bufferEnd !== null ? bufferEnd - bufferStart : 0;
                     if (duration > maxSecondsPerLine) {
                         pushBufferAsLine();
                     }
@@ -350,13 +335,7 @@ export const mapSegmentsIntoFormattedSegments = (
  * @param {number} options.minWordsPerSegment - Minimum number of words required for a segment to stand alone
  * @returns {MarkedSegment[]} Array of processed and marked segments
  */
-export const markAndCombineSegments = (
-    segments: Segment[],
-    options: MarkTokensWithDividersOptions & {
-        maxSecondsPerSegment: number;
-        minWordsPerSegment: number;
-    },
-) => {
+export const markAndCombineSegments = (segments: Segment[], options: MarkAndCombineSegmentsOptions) => {
     const tokens = segments.flatMap((segment) => segment.tokens!);
     let markedTokens = markTokensWithDividers(tokens, {
         fillers: options.fillers,
@@ -364,14 +343,8 @@ export const markAndCombineSegments = (
         ...(options.hints && { hints: options.hints }),
     });
     markedTokens = cleanupIsolatedTokens(markedTokens);
-    const markedSegments = groupMarkedTokensIntoSegments(
-        markedTokens,
-        options.maxSecondsPerSegment,
-    );
-    const combinedSegments = mergeShortSegmentsWithPrevious(
-        markedSegments,
-        options.minWordsPerSegment,
-    );
+    const markedSegments = groupMarkedTokensIntoSegments(markedTokens, options.maxSecondsPerSegment);
+    const combinedSegments = mergeShortSegmentsWithPrevious(markedSegments, options.minWordsPerSegment);
 
     return combinedSegments;
 };
@@ -383,9 +356,7 @@ export const markAndCombineSegments = (
  * @param {MarkedToken[]} markedTokens - The array of marked tokens to clean up
  * @returns {MarkedToken[]} A new array with unnecessary breaks removed
  */
-export const cleanupIsolatedTokens = (
-    markedTokens: MarkedToken[],
-): MarkedToken[] => {
+export const cleanupIsolatedTokens = (markedTokens: MarkedToken[]): MarkedToken[] => {
     const result: MarkedToken[] = [];
 
     for (let i = 0; i < markedTokens.length; i++) {
@@ -393,20 +364,11 @@ export const cleanupIsolatedTokens = (
         const next = markedTokens[i + 1];
         const future = markedTokens[i + 2];
 
-        if (
-            current === SEGMENT_BREAK &&
-            (next === ALWAYS_BREAK || next === SEGMENT_BREAK)
-        ) {
+        if (current === SEGMENT_BREAK && (next === ALWAYS_BREAK || next === SEGMENT_BREAK)) {
             // skip current break since we're placing a break anyways
-        } else if (
-            current === SEGMENT_BREAK &&
-            (future === SEGMENT_BREAK || future === ALWAYS_BREAK || !future)
-        ) {
+        } else if (current === SEGMENT_BREAK && (future === SEGMENT_BREAK || future === ALWAYS_BREAK || !future)) {
             // skip current break since we don't want to put a word by itself
-        } else if (
-            current === SEGMENT_BREAK &&
-            result.at(-1) === SEGMENT_BREAK
-        ) {
+        } else if (current === SEGMENT_BREAK && result.at(-1) === SEGMENT_BREAK) {
             // skip duplicate break
         } else {
             result.push(current);
@@ -428,10 +390,7 @@ export const cleanupIsolatedTokens = (
  * @returns A new `GroundedSegment` with the `tokens` adjusted to match the ground truth `text`
  * along with any unmatched tokens flagged.
  */
-export const updateSegmentWithGroundTruth = (
-    segment: Segment,
-    groundTruth: string,
-): GroundedSegment => {
+export const updateSegmentWithGroundTruth = (segment: Segment, groundTruth: string): GroundedSegment => {
     return {
         end: segment.end,
         start: segment.start,
@@ -446,10 +405,7 @@ export const updateSegmentWithGroundTruth = (
  * @param groundTruth The human verified transcription of the segment.
  * @returns A segment with the ground truth applies to the segment text and its tokens.
  */
-export const applyGroundTruthToSegment = (
-    segment: Segment,
-    groundTruth: string,
-): Segment => {
+export const applyGroundTruthToSegment = (segment: Segment, groundTruth: string): Segment => {
     const result = updateSegmentWithGroundTruth(segment, groundTruth);
     return { ...result, tokens: result.tokens.filter((t) => !t.isUnknown) };
 };
@@ -461,10 +417,7 @@ export const applyGroundTruthToSegment = (
  * @param delimiter - Optional string to join segment texts (defaults to space)
  * @returns A single merged segment containing all tokens
  */
-export const mergeSegments = (
-    segments: Segment[],
-    delimiter = ' ',
-): Segment => {
+export const mergeSegments = (segments: Segment[], delimiter = ' '): Segment => {
     const text = segments.map((segment) => segment.text).join(delimiter);
     const tokens = segments.flatMap((segment) => segment.tokens);
 
@@ -486,16 +439,9 @@ export const mergeSegments = (
  * @param splitTime - The time (in seconds) at which to split the segment
  * @returns An array containing exactly two segments
  */
-export const splitSegment = (
-    segment: Segment,
-    splitTime: number,
-): Segment[] => {
-    const firstTokens = segment.tokens.filter(
-        (token) => token.start < splitTime,
-    );
-    const secondTokens = segment.tokens.filter(
-        (token) => token.start >= splitTime,
-    );
+export const splitSegment = (segment: Segment, splitTime: number): Segment[] => {
+    const firstTokens = segment.tokens.filter((token) => token.start < splitTime);
+    const secondTokens = segment.tokens.filter((token) => token.start >= splitTime);
 
     const firstText = firstTokens.map((token) => token.text).join(' ');
     const secondText = secondTokens.map((token) => token.text).join(' ');
@@ -550,10 +496,7 @@ export const splitSegment = (
  * // → null
  * ```
  */
-export const getFirstMatchingToken = (
-    tokens: Token[],
-    query: string,
-): null | Token => {
+export const getFirstMatchingToken = (tokens: Token[], query: string): null | Token => {
     const hints = createHints(query);
 
     for (let i = 0; i < tokens.length; i++) {

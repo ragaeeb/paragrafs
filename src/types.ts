@@ -50,6 +50,11 @@ export type MarkTokensWithDividersOptions = {
     hints?: Hints;
 };
 
+export type MarkAndCombineSegmentsOptions = MarkTokensWithDividersOptions & {
+    maxSecondsPerSegment: number;
+    minWordsPerSegment: number;
+};
+
 /**
  * Represents a segment of text with timing information and optional word-level tokens.
  * A segment is a higher-level structure that contains a sequence of related tokens.

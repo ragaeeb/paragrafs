@@ -1,10 +1,55 @@
 # Agent Guide
 
+## High-level overview
+
+`paragrafs` is a small, functional TypeScript library for turning “raw ASR tokens/segments” into readable paragraphs, and for syncing timestamps against a human-edited “ground truth” transcript.
+
+The codebase is intentionally simple and data-oriented: most public API lives in `src/transcript.ts`, and helpers live in `src/utils/*`.
+
+## Mental model: the transcript pipeline
+
+There are two primary flows.
+
+### Segment reconstruction + formatting (tokens → markers → segments → text)
+
+- **Inputs**: `Segment[]` where each segment contains word-level `tokens: Token[]`
+- **Markers** (defined in `src/utils/constants.ts`):
+    - `SEGMENT_BREAK`: a “soft” break (a potential boundary that formatters may or may not render depending on max-line constraints)
+    - `ALWAYS_BREAK`: a “hard” boundary that must be preserved and must force a boundary (cannot be merged away)
+- **Typical call chain** (see `markAndCombineSegments` in `src/transcript.ts`):
+    - Flatten tokens
+    - `markTokensWithDividers(...)` inserts `SEGMENT_BREAK` and `ALWAYS_BREAK`
+    - `cleanupIsolatedTokens(...)` removes redundant breaks that would isolate a single token
+    - `groupMarkedTokensIntoSegments(...)` chunks marked tokens into `MarkedSegment[]`
+    - `mergeShortSegmentsWithPrevious(...)` merges “too short” segments (must respect `ALWAYS_BREAK`)
+    - `mapSegmentsIntoFormattedSegments(...)` turns `MarkedSegment[]` into `Segment[]` with `text` containing newline breaks
+    - `formatSegmentsToTimestampedTranscript(...)` emits timestamped lines
+
+**Design intent**: markers are inserted on the token stream (not derived from the final text). Downstream formatting should respect marker semantics rather than re-inferring boundaries.
+
+### Ground-truth alignment (AI tokens + ground truth → corrected tokens)
+
+- **Goal**: replace token texts with ground-truth words while preserving/estimating timings.
+- Entry points in `src/transcript.ts`:
+    - `updateSegmentWithGroundTruth(...)` keeps unknown tokens flagged
+    - `applyGroundTruthToSegment(...)` filters unknown tokens out for production-ready output
+- Core algorithm in `src/utils/transcriptUtils.ts`:
+    - LCS-based “anchors” + interpolation for inserted/missing words
+    - Uses `tokenizeGroundTruth(...)` and `normalizeWord(...)` from `src/utils/textUtils.ts`
+
 ## Repository layout
 - `src/transcript.ts` exposes the public API for marking tokens, formatting transcripts, and applying ground-truth edits. Expect helper utilities to live close to the functions they support.
 - `src/utils/textUtils.ts` and `src/utils/transcriptUtils.ts` house smaller helpers (hint generation, timestamp formatting, diff alignment). Add new utilities here instead of scattering helpers across files.
+- `src/utils/constants.ts` defines marker constants (`SEGMENT_BREAK`, `ALWAYS_BREAK`) used across the pipeline.
+- `src/types.ts` defines the public data model (`Token`, `Segment`, `MarkedToken`, `MarkedSegment`, and grounded types).
 - Tests live next to their subjects (for example `src/transcript.test.ts`). Whenever you add or modify a function in `src/`, update or extend the colocated test file to keep coverage current.
 - Build and lint configuration sits at the repo root (`tsdown.config.ts`, `biome.json`, `tsconfig.json`). Keep them in sync with any new entry points or formatting rules you introduce.
+
+## Public API + exports
+
+- `src/transcript.ts` is the main API surface. Prefer adding/adjusting exported functions here.
+- Keep `src/index.ts` aligned with the intended public surface (re-exports).
+- When behavior changes affect output formatting, update both tests and README examples.
 
 ## Tooling workflow
 - Run `bun run build` before committing. It executes the upstream `tsdown` CLI using `tsdown.config.ts` to generate optimized ESM output plus type declarations.
@@ -18,3 +63,30 @@
 - Use the `@/` path alias for imports originating from `src/` and avoid relative paths that climb out of the source tree.
 - Keep indentation at four spaces and rely on Biome for spacing/quoting decisions. Do not reintroduce Prettier or ESLint configs.
 - Avoid committing generated artifacts (`dist/`, coverage output, etc.). Only the TypeScript source, configs, and documentation should change in PRs.
+
+## Testing guidance (what to assert)
+
+- Prefer **behavioral assertions** (exact tokens/markers and exact output text) over snapshotting large objects.
+- When changing segmentation:
+    - Add tests that cover both “formatted segments” (`mapSegmentsIntoFormattedSegments`) and “timestamped transcript output” (`formatSegmentsToTimestampedTranscript`).
+    - Include cases for both markers:
+        - `SEGMENT_BREAK` (soft) should be sensitive to `maxSecondsPerLine` / punctuation rules.
+        - `ALWAYS_BREAK` (hard) should force boundaries regardless of duration thresholds.
+- Avoid leaving `.only` in committed tests.
+
+## Common pitfalls / invariants
+
+- **`ALWAYS_BREAK` must be a hard boundary**:
+    - It should force a new line in formatting.
+    - It should prevent downstream “combine/merge” steps from absorbing the post-break phrase back into previous segments.
+- `cleanupIsolatedTokens(...)` may remove redundant `SEGMENT_BREAK`s, but it should not erase the meaning of `ALWAYS_BREAK`.
+- Keep time math monotonic: tokens should remain ordered and start/end should not go backwards.
+- Punctuation detection (including Arabic punctuation) is centralized in `isEndingWithPunctuation(...)`—update it there rather than scattering checks.
+
+## Where to add new code
+
+- If it’s part of the end-user API: add it to `src/transcript.ts` and re-export via `src/index.ts` as needed.
+- If it’s a small reusable helper:
+    - `src/utils/textUtils.ts` for string/token formatting and parsing utilities
+    - `src/utils/transcriptUtils.ts` for alignment/diff logic
+- Add/extend tests in the colocated test file (`src/transcript.test.ts` or relevant `src/utils/*.test.ts`).
