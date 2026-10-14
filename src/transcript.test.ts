@@ -1213,18 +1213,18 @@ describe('transcript', () => {
                         text: 'رب-',
                     },
                     {
-                        end: 16,
+                        end: 18,
                         start: 16,
                         text: 'العالمين،',
                     },
                     {
-                        end: 16,
-                        start: 16,
+                        end: 18,
+                        start: 18,
                         text: 'الصلاة!',
                     },
                     {
                         end: 18,
-                        start: 16,
+                        start: 18,
                         text: 'والسلام',
                     },
                 ],

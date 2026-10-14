@@ -301,3 +301,39 @@ Ragaeeb Haq
 ---
 
 Built with TypeScript and Bun. Uses ESM module format.
+
+## Canonical alignment and bounded subtitles
+
+Use the actual `paragrafs/ground-truth` entry point when an editor needs explicit input/output correspondence:
+
+```typescript
+import { alignGroundTruth } from 'paragrafs/ground-truth';
+
+const result = alignGroundTruth(
+    [{ text: 'hello', start: 1, end: 2 }, { text: 'world', start: 3, end: 4 }],
+    'hello corrected world trailing',
+);
+// result.tokens preserves every reviewed word and exact separators/surface text.
+// result.correspondence reports match/replace/insert/delete/split/merge indices.
+// result.diagnostics exposes repeated/positional identity and untimed words.
+```
+
+Indices are zero-based; application IDs stay outside Paragrafs. New boundary words remain untimed when valid neighboring bounds are absent. Interior interpolation is labelled `interpolated`; use `{ interpolate: false }` to preserve all missing timing. The bounded alignment refuses selections without reliable anchors when its cell/window budget is exceeded. Repeated anchors and positional replacements require review. `syncTokensWithGroundTruth` and the existing segment helpers retain their timed-token compatibility shape, including zero-duration placeholders for new boundary words; canonical editors should use `alignGroundTruth`.
+
+Use `paragrafs/subtitles` for screen cues:
+
+```typescript
+import { buildSubtitleCues } from 'paragrafs/subtitles';
+
+const { cues, omissions, diagnostics } = buildSubtitleCues(tokens, {
+    maxSeconds: 6,
+    maxCharacters: 84,
+    maxCharactersPerLine: 42,
+    maxLines: 2,
+    maxCharactersPerSecond: 20,
+    hardBreakBefore: [12],
+    fillers: ['uh'],
+});
+```
+
+Each cue includes its original `tokenIndices`. Hard duration, character and line bounds apply without punctuation. Speaker changes, silence and manual boundaries remain boundaries, including boundaries before an omitted filler. Defaults omit nothing; configured fillers have explicit omission records. Untimed tokens reject generation. Impossible reading windows and source overlaps preserve the words and produce diagnostics that an application must review before publication. Display hold time never changes source-token timing. All times are seconds; corpus consumers convert their milliseconds at the adapter boundary.
