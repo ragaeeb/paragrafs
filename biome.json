@@ -13,7 +13,7 @@
     },
     "files": {
         "ignoreUnknown": true,
-        "includes": ["**", "!**/node_modules/**", "!**/dist/**", "!**/build/**", "!**/coverage/**"]
+        "includes": ["**", "!**/node_modules", "!**/dist", "!**/build", "!**/coverage"]
     },
     "formatter": {
         "enabled": true,
@@ -29,35 +29,6 @@
             "quoteStyle": "single",
             "semicolons": "always",
             "trailingCommas": "all"
-        }
-    },
-    "linter": {
-        "domains": {
-            "project": "recommended"
-        },
-        "enabled": true,
-        "rules": {
-            "complexity": {
-                "noExcessiveCognitiveComplexity": "warn",
-                "useWhile": "error"
-            },
-            "recommended": true,
-            "style": {
-                "noNonNullAssertion": "off",
-                "useBlockStatements": {
-                    "fix": "safe",
-                    "level": "error",
-                    "options": {}
-                },
-                "useTemplate": {
-                    "fix": "safe",
-                    "level": "warn",
-                    "options": {}
-                }
-            },
-            "suspicious": {
-                "noExplicitAny": "off"
-            }
         }
     },
     "vcs": {
