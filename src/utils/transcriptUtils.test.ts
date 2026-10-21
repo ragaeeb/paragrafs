@@ -14,20 +14,29 @@ describe('transcriptUtils', () => {
 
         it('returns false when a candidate phrase runs past the end of the token list', () => {
             const normalizedTokens = ['a', 'b'];
-            const hints: Hints = { map: { a: [['a', 'b', 'c']] }, normalization: {} as Required<ArabicNormalizationOptions> };
+            const hints: Hints = {
+                map: { a: [['a', 'b', 'c']] },
+                normalization: {} as Required<ArabicNormalizationOptions>,
+            };
             expect(isHintMatched(normalizedTokens, hints, 0)).toBeFalse();
         });
 
         it('returns true when a candidate phrase matches', () => {
             const normalizedTokens = ['a', 'b', 'c'];
-            const hints: Hints = { map: { a: [['a', 'b']] }, normalization: {} as Required<ArabicNormalizationOptions> };
+            const hints: Hints = {
+                map: { a: [['a', 'b']] },
+                normalization: {} as Required<ArabicNormalizationOptions>,
+            };
             expect(isHintMatched(normalizedTokens, hints, 0)).toBeTrue();
         });
     });
 
     describe('syncTokensWithGroundTruth', () => {
-        it('returns [] when given no tokens', () => {
-            expect(syncTokensWithGroundTruth([], 'hello world')).toEqual([]);
+        it('preserves ground truth words when no source timing exists', () => {
+            expect(syncTokensWithGroundTruth([], 'hello world')).toEqual([
+                { end: 0, start: 0, text: 'hello' },
+                { end: 0, start: 0, text: 'world' },
+            ]);
         });
 
         it('marks all tokens as unknown when ground truth is empty', () => {
@@ -810,14 +819,14 @@ describe('transcriptUtils', () => {
                 },
                 {
                     end: 60,
-                    isUnknown: true,
                     start: 59,
-                    text: 'هي',
+                    text: 'اقوم.',
                 },
                 {
                     end: 61,
+                    isUnknown: true,
                     start: 60,
-                    text: 'اقوم.',
+                    text: 'اهون',
                 },
             ]);
         });
@@ -835,10 +844,13 @@ describe('transcriptUtils', () => {
             ]);
         });
 
-        it('ignores extra ground-truth words when there is only one token (tail gt cannot be aligned)', () => {
+        it('preserves trailing ground-truth words when there is only one token', () => {
             const tokens = [{ end: 1, start: 0, text: 'X' }];
             const actual = syncTokensWithGroundTruth(tokens, 'A B');
-            expect(actual).toEqual([{ end: 1, start: 0, text: 'A' }]);
+            expect(actual).toEqual([
+                { end: 1, start: 0, text: 'A' },
+                { end: 1, start: 1, text: 'B' },
+            ]);
         });
     });
 });

@@ -301,3 +301,45 @@ Ragaeeb Haq
 ---
 
 Built with TypeScript and Bun. Uses ESM module format.
+
+## Canonical alignment and bounded subtitles
+
+Use the actual `paragrafs/ground-truth` entry point when an editor needs explicit input/output correspondence:
+
+```typescript
+import { alignGroundTruth } from 'paragrafs/ground-truth';
+
+const result = alignGroundTruth(
+    [{ text: 'hello', start: 1, end: 2 }, { text: 'world', start: 3, end: 4 }],
+    'hello corrected world trailing',
+);
+// result.tokens preserves every reviewed word and exact separators/surface text.
+// result.correspondence reports match/replace/insert/delete/split/merge indices.
+// result.diagnostics exposes repeated/positional identity and untimed words.
+```
+
+Indices are zero-based; application IDs stay outside Paragrafs. New boundary words remain untimed when valid neighboring bounds are absent. Interior interpolation is labelled `interpolated`; use `{ interpolate: false }` to preserve all missing timing. The bounded alignment refuses selections without reliable anchors when its cell/window budget is exceeded. Repeated anchors and positional replacements require review. `syncTokensWithGroundTruth` and the existing segment helpers retain their timed-token compatibility shape, including zero-duration placeholders for new boundary words; canonical editors should use `alignGroundTruth`.
+
+Use `paragrafs/subtitles` for screen cues:
+
+```typescript
+import { createHints } from 'paragrafs';
+import { buildSubtitleCues } from 'paragrafs/subtitles';
+
+const { cues, omissions, diagnostics } = buildSubtitleCues(tokens, {
+    maxSeconds: 6,
+    maxCharacters: 84,
+    maxCharactersPerLine: 42,
+    maxLines: 2,
+    maxCharactersPerSecond: 20,
+    hints: createHints({ normalizeAlef: true, normalizeHamza: true, normalizeYa: true }, 'أما بعد'),
+    hardBreakBefore: [12],
+    fillers: ['uh'],
+});
+```
+
+Each cue includes its original `tokenIndices`. Sentence punctuation, clause punctuation and normalized phrase hints guide readable boundaries; bounded lookahead avoids a full cue followed by a tiny tail. Hard duration, character and line bounds still apply without punctuation. Speaker changes, silence and manual boundaries remain boundaries, including boundaries before an omitted filler. Defaults omit nothing; configured fillers have explicit omission records. Untimed tokens reject generation unless the caller explicitly supplies `estimatedWindow: { start, end }` for the whole text. That mode estimates cue-level display times, not word alignment; callers must split separate speech windows before allocation. Impossible reading windows and source overlaps preserve the words and produce diagnostics that an application must review before publication. Display hold time never changes source-token timing. All times are seconds; corpus consumers convert their milliseconds at the adapter boundary.
+
+The preferred `minSeconds` is a reading target. An isolated whole speech block may be up to 20% shorter when all size/rate caps pass; it emits `short_source_window` and never extends past the next token or permitted silence hold. Other impossible reading windows remain errors for the caller to review. Source timings are never rewritten.
+
+Phrase hints are not mining stopwords: `GenerateHintsOptions.stopwords` excludes all-stopword n-grams from candidate mining only. Applications choose language/domain phrase hints; the library does not hardcode an Islamic/Arabic vocabulary. Normalize mining stopwords with the same options used for tokens.
