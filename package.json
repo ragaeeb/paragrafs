@@ -53,7 +53,7 @@
     "name": "paragrafs",
     "repository": {
         "type": "git",
-        "url": "https://github.com/ragaeeb/paragrafs.git"
+        "url": "git+https://github.com/ragaeeb/paragrafs.git"
     },
     "scripts": {
         "build": "tsdown",
